@@ -11,6 +11,12 @@ const START_SERVER = () => {
   app.use(express.json())
   //use api v1
   app.use('/v1', APIs_V1)
+  // middlewares xử lý lỗi tập trung
+  app.use((err, req, res, next) => {
+    console.error(err.stack)
+    res.status(500).send('Something broke!')
+  })
+
 
   app.listen(env.APP_PORT, env.APP_HOST, () => {
     console.log(`Hello ${env.AUTHOR}, I am running at ${ env.APP_HOST }:${ env.APP_PORT }/`)

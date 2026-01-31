@@ -6,11 +6,14 @@ const createNew = async (req, res, next) => {
     console.log('req.body', req.body)
     console.log('req.query', req.query)
     console.log('req.param', req.query)
-    res.status(StatusCodes.CREATED).json({ message: 'POST from controller: API get new board' })
+
+    throw new Error('test error!')
+    // res.status(StatusCodes.CREATED).json({ message: 'POST from controller: API get new board' })
   } catch (error) {
-    res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({
-      errors: error.message
-    })
+    next(error)
+    // res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({
+    //   errors: error.message
+    // })
   }
 }
 
