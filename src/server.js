@@ -4,6 +4,7 @@ import express from 'express'
 import { CLOSE_DB, CONNECT_DB } from './config/mongodb'
 import { env } from '~/config/environment'
 import { APIs_V1 } from '~/routes/v1'
+import { errorHandlingMiddleware } from '~/middlewares/errorHandlingMiddleware'
 
 const START_SERVER = () => {
   const app = express()
@@ -12,10 +13,7 @@ const START_SERVER = () => {
   //use api v1
   app.use('/v1', APIs_V1)
   // middlewares xử lý lỗi tập trung
-  app.use((err, req, res, next) => {
-    console.error(err.stack)
-    res.status(500).send('Something broke!')
-  })
+  app.use(errorHandlingMiddleware)
 
 
   app.listen(env.APP_PORT, env.APP_HOST, () => {
