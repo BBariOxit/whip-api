@@ -8,6 +8,7 @@ export const corsOptions = {
   origin: function (origin, callback) {
     console.log('cors option:', origin)
     // Cho phép việc gọi API bằng POSTMAN trên môi trường dev,
+
     // Thông thường khi sử dụng postman thì cái origin sẽ có giá trị là undefined
     // khi chúng ta deploy dự án lên một Server Production thì sẽ sửa lại đoạn này
     // thêm một chút nữa để phù hợp với từng môi trường production hoặc dev
