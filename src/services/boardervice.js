@@ -36,6 +36,7 @@ const getDetails = async (boardId) => {
     if (!board) {
       throw new ApiError(StatusCodes.NOT_FOUND, 'board not found!')
     }
+
     return board
   } catch (error) {
     throw error
