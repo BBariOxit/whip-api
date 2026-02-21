@@ -37,7 +37,33 @@ const getDetails = async (boardId) => {
       throw new ApiError(StatusCodes.NOT_FOUND, 'board not found!')
     }
 
-    return board
+    // // B1: structuredClone board ra một cái mới để xử lý, không ảnh hưởng tới board ban đầu,
+    // // tùy mục đích về sau mà có cần structuredClone hay không.
+    // const resBoard = structuredClone(board)
+    // // B2: đưa card về đúng column của nó
+    // resBoard.columns.forEach(column => {
+    //   column.cards = resBoard.cards.filter(card => card.columnId.toString() === column._id.toString())
+    //   // column.cards = resBoard.cards.filter(card => card.columnId.equals(column._id))
+    // })
+    // // B3: xóa mảng card khỏi board ban đầu
+    // delete resBoard.cards
+
+    // khi xài structuredClone, nó làm bay sạch method của ObjectId, gọi .toString() nó sẽ ra cái chuỗi "[object Object]" hoặc mớ hỗn độn nào đó
+    // => ép kiểu toàn bộ Object về String trước khi filter
+
+    // B1: Dùng cách này để "String hóa" toàn bộ ObjectId một cách nhanh nhất
+    const resBoard = JSON.parse(JSON.stringify(board))
+
+    // B2: đưa card về đúng column của nó
+    // bây giờ resBoard._id, column._id, card.columnId... ĐỀU LÀ STRING NGUYÊN BẢN
+    resBoard.columns.forEach(column => {
+      column.cards = resBoard.cards.filter(card => card.columnId === column._id)
+    })
+
+    // B3: xóa mảng card khỏi board ban đầu
+    delete resBoard.cards
+
+    return resBoard
   } catch (error) {
     throw error
   }
