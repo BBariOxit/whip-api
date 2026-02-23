@@ -43,13 +43,14 @@ const getDetails = async (boardId) => {
     // // B2: đưa card về đúng column của nó
     // resBoard.columns.forEach(column => {
     //   column.cards = resBoard.cards.filter(card => card.columnId.toString() === column._id.toString())
+         // Cách dùng .equals này là bởi vì chúng ta hiểu ObjectId trong MongoDB có support method .equals
     //   // column.cards = resBoard.cards.filter(card => card.columnId.equals(column._id))
     // })
     // // B3: xóa mảng card khỏi board ban đầu
     // delete resBoard.cards
 
     // khi xài structuredClone, nó làm bay sạch method của ObjectId, gọi .toString() nó sẽ ra cái chuỗi "[object Object]" hoặc mớ hỗn độn nào đó
-    // => ép kiểu toàn bộ Object về String trước khi filter
+    // => ép kiểu toàn bộ Object về String trước khi filter, hoặc xài clone deep của lodash
 
     // B1: Dùng cách này để "String hóa" toàn bộ ObjectId một cách nhanh nhất
     const resBoard = JSON.parse(JSON.stringify(board))
