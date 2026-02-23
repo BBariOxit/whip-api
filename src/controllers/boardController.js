@@ -20,7 +20,7 @@ const createNew = async (req, res, next) => {
 
 const getDetails = async (req, res, next) => {
   try {
-    // console.log('req.param', req.query)
+    // console.log('req.params', req.query)
     const boardId = req.params.id
 
     // điều hướng dữ liệu qua tầng service
