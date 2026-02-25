@@ -1,8 +1,8 @@
 import express from 'express'
 import { StatusCodes } from 'http-status-codes'
-import { boardRouter } from './boardRouter'
-import { columnRouter } from './columnRouter'
-import { cardRouter } from './cardRouter'
+import { boardRouter } from './boardRoute'
+import { columnRouter } from './columnRoute'
+import { cardRouter } from './cardRoute'
 
 const Router = express.Router()
 //check APIs v1/status
