@@ -19,6 +19,7 @@ const COLUMN_COLLECTION_SCHEMA = Joi.object({
   _destroy: Joi.boolean().default(false)
 })
 
+
 const validateBeforeCreate = async (data) => {
   return await COLUMN_COLLECTION_SCHEMA.validateAsync(data, { abortEarly: false })
 }
@@ -57,7 +58,7 @@ const pushCardOrderIds = async (card) => {
       { $push: { cardOrderIds: new ObjectId(card._id) } },
       { returnDocument: 'after' }
     )
-    return result.value
+    return result
   } catch (error) {
     throw new Error(error)
   }
