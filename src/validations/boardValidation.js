@@ -68,7 +68,7 @@ const moveCardifferentColumn = async (req, res, next) => {
     currCardId: Joi.string().required().pattern(OBJECT_ID_RULE).message(OBJECT_ID_RULE_MESSAGE),
 
     prevColumnId: Joi.string().required().pattern(OBJECT_ID_RULE).message(OBJECT_ID_RULE_MESSAGE),
-    preCardOrderIds: Joi.array().required().items(
+    prevCardOrderIds: Joi.array().required().items(
       Joi.string().pattern(OBJECT_ID_RULE).message(OBJECT_ID_RULE_MESSAGE)
     ),
 
