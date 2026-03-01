@@ -19,10 +19,19 @@ const START_SERVER = () => {
   // middlewares xử lý lỗi tập trung
   app.use(errorHandlingMiddleware)
 
+  // môi trường production
+  if (env.BUILD_MODE === 'production') {
+    app.listen(process.env.PORT, () => {
+      console.log(`3. Production: Hello ${env.AUTHOR}, I am running at port: ${ process.env.PORT }/`)
+    })
+  } else {
+    // môi trường local dev
+    app.listen(env.LOCAL_DEV_APP_PORT, env.LOCAL_DEV_APP_HOST, () => {
+      console.log(`3. Local: Hello ${env.AUTHOR}, I am running at ${ env.APP_HOST }:${ env.APP_PORT }/`)
+    })
+  }
 
-  app.listen(env.APP_PORT, env.APP_HOST, () => {
-    console.log(`Hello ${env.AUTHOR}, I am running at ${ env.APP_HOST }:${ env.APP_PORT }/`)
-  })
+  
 
   exitHook(() => {
     console.log('4. disconnecting MongoDB Cloud Atlas...')
