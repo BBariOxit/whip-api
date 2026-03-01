@@ -18,6 +18,11 @@ export const corsOptions = {
       return callback(null, true)
     }
 
+    // Cứ thằng nào có đuôi .vercel.app là cho qua hết
+    if (origin && /\.vercel\.app$/.test(origin)) {
+      return callback(null, true)
+    }
+
     // Cuối cùng nếu domain không được chấp nhận thì trả về lỗi
     return callback(new ApiError(StatusCodes.FORBIDDEN, `${origin} not allowed by our CORS Policy.`))
   },
