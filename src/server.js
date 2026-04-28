@@ -27,11 +27,9 @@ const START_SERVER = () => {
   } else {
     // môi trường local dev
     app.listen(env.LOCAL_DEV_APP_PORT, env.LOCAL_DEV_APP_HOST, () => {
-      console.log(`3. Local: Hello ${env.AUTHOR}, I am running at ${ env.APP_HOST }:${ env.APP_PORT }/`)
+      console.log(`3. Local: Hello ${env.AUTHOR}, I am running at ${ env.LOCAL_DEV_APP_HOST }:${ env.LOCAL_DEV_APP_PORT }/`)
     })
   }
-
-  
 
   exitHook(() => {
     console.log('4. disconnecting MongoDB Cloud Atlas...')
