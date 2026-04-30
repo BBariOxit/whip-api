@@ -4,6 +4,9 @@ import ApiError from "~/utils/ApiError"
 import bcryptjs from 'bcryptjs'
 import { v4 as uuidv4 } from 'uuid'
 import { pickUser } from "~/utils/formatter"
+import { resendProvider } from "~/providers/resendProvider"
+import { env } from "~/config/environment"
+
 
 const createNew = async (reqBody) => {
   try {
@@ -29,8 +32,23 @@ const createNew = async (reqBody) => {
     const createdUser = await userModel.createNew(newUser)
     const getNewUser = await userModel.findOneById(createdUser.insertedId)
 
-    // gửi email cho người dùng xác thực tài khoản
+    // Link xác thực tài khoản
+    const verificationLink = `${env.BUILD_MODE === 'dev' ? env.WEBSITE_DOMAIN_DEVELOPMENT : env.WEBSITE_DOMAIN_PRODUCTION}/account/verification?email=${getNewUser.email}&token=${getNewUser.verifyToken}`
+    // Tiêu đề email
+    const customSubject = 'Confirm your account - Whip App'
+    // Nội dung email
+    const customHTMLContent = `
+      <h3>Welcome to Whip App!</h3>
+      <p>Please click the link below to verify your account:</p>
+      <a href="${verificationLink}">Verify Account</a>`
     
+    // gửi email cho người dùng xác thực tài khoản
+    await resendProvider.sendEmail(
+      getNewUser.email,
+      customSubject,
+      customHTMLContent
+    )
+
     // return trả về dữ liệu cho phía controller
     return pickUser(getNewUser)
   } catch (error) {
