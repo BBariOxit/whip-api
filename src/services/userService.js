@@ -56,7 +56,7 @@ const createNew = async (reqBody) => {
   }
 }
 
-const verifyAccount = async () => {
+const verifyAccount = async (reqBody) => {
   try { 
     // Query user trong Database
     const existUser = await userModel.findOneByEmail(reqBody.email)
@@ -81,7 +81,7 @@ const verifyAccount = async () => {
   } catch (error) {throw error}
 }
 
-const login = async () => {
+const login = async (reqBody) => {
   try { 
     // Query user trong Database
     const existUser = await userModel.findOneByEmail(reqBody.email)
