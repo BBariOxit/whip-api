@@ -58,7 +58,7 @@ const createNew = async (reqBody) => {
 
 const verifyAccount = async (reqBody) => {
   try { 
-    // Query user trong Database
+    // Query user trong Database  
     const existUser = await userModel.findOneByEmail(reqBody.email)
 
     // Các bước kiểm tra cần thiết
