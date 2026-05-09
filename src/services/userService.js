@@ -7,7 +7,7 @@ import { pickUser } from "~/utils/formatter"
 import { resendProvider } from "~/providers/resendProvider"
 import { env } from "~/config/environment"
 import { jwtProvider } from "~/providers/JwtProvider"
-import { cloudinaryProvider } from "~/providers/cloudinaryProvider"
+import { cloudinaryProvider } from "~/providers/CloudinaryProvider"
 
 const createNew = async (reqBody) => {
   try {
