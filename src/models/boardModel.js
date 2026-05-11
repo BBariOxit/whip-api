@@ -159,22 +159,32 @@ const getBoards = async (userId, page, itemsPerPage) => {
       ] }
     ]
 
-    const query = await GET_DB().collection(BOARD_COLLECTION_NAME).aggregate([
-      { $match: { $and: queryConditions } },
-      // // sort title của board theo A-Z (mặc định sẽ bị chữ B hoa đứng trước chữ a thường (theo chuẩn bảng mã ASCII)
-      { $sort: { title: 1 } },
-      // $facet để xử lý nhiều luông trong 1 query
-      { $facet: { 
-        // luồng 1: quey boards
-        'queryBoards': [
-          { $skip: pagingSkipValue(page, itemsPerPage) }, // bỏ qua số lượng bản ghi của những page trước đó
-          { $limit: itemsPerPage } // giới hạn tối đa số lượng bản ghi trên một page
-        ],
-        // luồng 2: query đếm tổng số tất cả lượng bản ghi boards trong db
-        'queryTotalBoards': []  
-      } }
+    const query = await GET_DB().collection(BOARD_COLLECTION_NAME).aggregate(
+      [
+        { $match: { $and: queryConditions } },
+        // // sort title của board theo A-Z (mặc định sẽ bị chữ B hoa đứng trước chữ a thường (theo chuẩn bảng mã ASCII)
+        { $sort: { title: 1 } },
+        // $facet để xử lý nhiều luông trong 1 query
+        { $facet: { 
+          // luồng 1: quey boards
+          'queryBoards': [
+            { $skip: pagingSkipValue(page, itemsPerPage) }, // bỏ qua số lượng bản ghi của những page trước đó
+            { $limit: itemsPerPage } // giới hạn tối đa số lượng bản ghi trên một page
+          ],
+          // luồng 2: query đếm tổng số tất cả lượng bản ghi boards trong db trả về váo biến countedAllBoards
+          'queryTotalBoards': [{ $count: 'countedAllBoards' }]  
+        } }
+      ],
+      // Khai báo thêm thuộc tính collation locale 'en' để fix vụ chữ B hoa và a thường ở trên
+      { collation: { locale: 'en' } }
+    ).toArray()
 
-    ])
+    const res = query[0]
+
+    return {
+      boards: res.queryBoards || [],
+      totalBoards: res.queryTotalBoards[0]?.countedAllBoards || 0
+    }
   } catch (error) {
     throw new Error(error)
   }
