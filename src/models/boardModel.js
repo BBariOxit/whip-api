@@ -5,6 +5,7 @@ import { ObjectId } from 'mongodb'
 import { BOARD_TYPES } from '~/utils/constants'
 import { columnModel } from './columnModel'
 import { cardModel } from './cardModel'
+import { pagingSkipValue } from '~/utils/algorithms'
 
 // define collection (name & schema)
 
@@ -157,6 +158,23 @@ const getBoards = async (userId, page, itemsPerPage) => {
         { memberIds: { $all: [new ObjectId(userId)] } }
       ] }
     ]
+
+    const query = await GET_DB().collection(BOARD_COLLECTION_NAME).aggregate([
+      { $match: { $and: queryConditions } },
+      // // sort title của board theo A-Z (mặc định sẽ bị chữ B hoa đứng trước chữ a thường (theo chuẩn bảng mã ASCII)
+      { $sort: { title: 1 } },
+      // $facet để xử lý nhiều luông trong 1 query
+      { $facet: { 
+        // luồng 1: quey boards
+        'queryBoards': [
+          { $skip: pagingSkipValue(page, itemsPerPage) }, // bỏ qua số lượng bản ghi của những page trước đó
+          { $limit: itemsPerPage } // giới hạn tối đa số lượng bản ghi trên một page
+        ],
+        // luồng 2: query đếm tổng số tất cả lượng bản ghi boards trong db
+        'queryTotalBoards': []  
+      } }
+
+    ])
   } catch (error) {
     throw new Error(error)
   }
