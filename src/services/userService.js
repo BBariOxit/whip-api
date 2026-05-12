@@ -4,7 +4,7 @@ import ApiError from "~/utils/ApiError"
 import bcryptjs from 'bcryptjs'
 import { v4 as uuidv4 } from 'uuid'
 import { pickUser } from "~/utils/formatter"
-import { resendProvider } from "~/providers/resendProvider"
+import { brevoProvider } from "~/providers/brevoProvider"
 import { env } from "~/config/environment"
 import { jwtProvider } from "~/providers/JwtProvider"
 import { cloudinaryProvider } from "~/providers/CloudinaryProvider"
@@ -44,7 +44,7 @@ const createNew = async (reqBody) => {
       <a href="${verificationLink}">Verify Account</a>`
     
     // gửi email cho người dùng xác thực tài khoản
-    await resendProvider.sendEmail(
+    await brevoProvider.sendEmail(
       getNewUser.email,
       customSubject,
       customHTMLContent
