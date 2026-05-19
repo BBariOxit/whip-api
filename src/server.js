@@ -12,6 +12,7 @@ import cookieParser from 'cookie-parser'
 // https://socket.io/get-started/chat/#integrating-socketio
 import socketIo from 'socket.io'
 import http from 'http'
+import { inviteUserToBoardSocket } from './sockets/inviteUserToBoardSocket'
 
 const START_SERVER = () => {
   const app = express()
@@ -42,7 +43,8 @@ const START_SERVER = () => {
   // khởi tạo biến io với sever và cors
   const io = socketIo(server, { cors: corsOptions })
   io.on('connection', (socket) => {
-    console.log('User connected:', socket.id)
+    // gọi các socket
+    inviteUserToBoardSocket(io, socket)
   })
 
   // môi trường production
