@@ -44,6 +44,9 @@ const update = async (cardId, reqBody, cardCoverFile, userInfo) => {
       }
       // dùng push để thêm comment vào mảng comments
       updatedCard = await cardModel.unshiftNewComment(cardId, commentData)
+    } else if (updateData.incomingMemberInfo) {
+      // trường hợp ADD/REMOVE cardMemberInfo
+      updatedCard = await cardModel.updateMembers(cardId, updateData.incomingMemberInfo)
     } else {
       // các trường hợp update chung như title, description, due date, comment...
       updatedCard = await cardModel.update(cardId, updateData)
