@@ -8,4 +8,8 @@ const Router = express.Router()
 Router.route('/')
   .post(authMiddleware.isAuthorized, labelValidation.createNew, labelController.createNew)
 
+Router.route('/:id')
+  .put(authMiddleware.isAuthorized, labelValidation.update, labelController.update)
+  .delete(authMiddleware.isAuthorized, labelValidation.deleteItem, labelController.deleteItem)
+
 export const labelRouter = Router

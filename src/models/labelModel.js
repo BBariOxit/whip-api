@@ -40,9 +40,35 @@ const findOneById = async (labelId) => {
   }
 }
 
+const update = async (id, updateData) => {
+  try {
+    const result = await GET_DB().collection(LABEL_COLLECTION_NAME).findOneAndUpdate(
+      { _id: new ObjectId(id) },
+      { $set: updateData },
+      { returnDocument: 'after' }
+    )
+    return result
+  } catch (error) {
+    throw new Error(error)
+  }
+}
+
+const deleteOneById = async (id) => {
+  try {
+    const result = await GET_DB().collection(LABEL_COLLECTION_NAME).deleteOne({
+      _id: new ObjectId(id)
+    })
+    return result
+  } catch (error) {
+    throw new Error(error)
+  }
+}
+
 export const labelModel = {
   LABEL_COLLECTION_NAME,
   LABEL_COLLECTION_SCHEMA,
   createNew,
-  findOneById
+  findOneById,
+  update,
+  deleteOneById
 }
