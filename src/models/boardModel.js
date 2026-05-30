@@ -7,6 +7,7 @@ import { columnModel } from './columnModel'
 import { cardModel } from './cardModel'
 import { pagingSkipValue } from '~/utils/algorithms'
 import { userModel } from './userModel'
+import { labelModel } from './labelModel'
 
 // define collection (name & schema)
 
@@ -112,6 +113,12 @@ const getDetails = async (userId, boardId) => {
         foreignField: '_id',
         as: 'members',
         pipeline: [{ $project: { 'password': 0, 'verifyToken': 0 } }]
+      } },
+      { $lookup: {
+        from: labelModel.LABEL_COLLECTION_NAME,
+        localField: '_id',
+        foreignField: 'boardId',
+        as: 'labels'
       } }
     ]).toArray()
     return result[0] || null
