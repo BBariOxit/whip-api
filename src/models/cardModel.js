@@ -13,7 +13,8 @@ const CARD_COLLECTION_SCHEMA = Joi.object({
   title: Joi.string().required().min(3).max(50).trim().strict(),
   description: Joi.string().optional(),
   cover: Joi.string().default(null),
-    memberIds: Joi.array().items(Joi.string().pattern(OBJECT_ID_RULE).message(OBJECT_ID_RULE_MESSAGE)).default([]),
+  memberIds: Joi.array().items(Joi.string().pattern(OBJECT_ID_RULE).message(OBJECT_ID_RULE_MESSAGE)).default([]),
+  labelIds: Joi.array().items(Joi.string().pattern(OBJECT_ID_RULE).message(OBJECT_ID_RULE_MESSAGE)).default([]),
   // Dữ liệu comments của Card chúng ta sẽ học cách nhúng - embedded vào bản ghi Card luôn như dưới đây:
   comments: Joi.array().items(Joi.object({
     userId: Joi.string().pattern(OBJECT_ID_RULE).message(OBJECT_ID_RULE_MESSAGE),
@@ -76,6 +77,9 @@ const update = async (cardId, updateData) => {
     // đối với những dữ liệu liên quan tới ObjectId, biến đổi ở đây
     if (updateData.columnId) {
       updateData.columnId = new ObjectId(updateData.columnId)
+    }
+    if (updateData.labelIds) {
+      updateData.labelIds = updateData.labelIds.map(_id => new ObjectId(_id))
     }
 
     const result = await GET_DB().collection(CARD_COLLECTION_NAME).findOneAndUpdate(
@@ -148,6 +152,18 @@ const updateMembers = async (cardId, incomingMemberInfo) => {
   } catch (error) { throw new Error(error) }
 }
 
+const pullLabelFromCards = async (boardId, labelId) => {
+  try {
+    const result = await GET_DB().collection(CARD_COLLECTION_NAME).updateMany(
+      { boardId: new ObjectId(boardId) },
+      { $pull: { labelIds: new ObjectId(labelId) } }
+    )
+    return result
+  } catch (error) {
+    throw new Error(error)
+  }
+}
+
 export const cardModel = {
   CARD_COLLECTION_NAME,
   CARD_COLLECTION_SCHEMA,
@@ -156,5 +172,6 @@ export const cardModel = {
   update,
   deleteManyByColumnId,
   unshiftNewComment,
-  updateMembers
+  updateMembers,
+  pullLabelFromCards
 }
