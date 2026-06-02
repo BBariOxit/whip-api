@@ -45,15 +45,25 @@ const createNew = async (data) => {
 }
 
 /**
- * Lấy danh sách activities theo cardId, sort mới nhất lên đầu
+ * Lấy danh sách activities theo cardId, sort mới nhất lên đầu, có phân trang
  */
-const getActivitiesByCardId = async (cardId) => {
+const getActivitiesByCardId = async (cardId, page = 1, limit = 10) => {
   try {
-    const result = await GET_DB().collection(ACTIVITY_COLLECTION_NAME)
-      .find({ cardId: new ObjectId(cardId) })
-      .sort({ createdAt: -1 })
-      .toArray()
-    return result
+    const skip = (page - 1) * limit
+    const query = { cardId: new ObjectId(cardId) }
+
+    const [activities, total] = await Promise.all([
+      GET_DB().collection(ACTIVITY_COLLECTION_NAME)
+        .find(query)
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(limit)
+        .toArray(),
+      GET_DB().collection(ACTIVITY_COLLECTION_NAME)
+        .countDocuments(query)
+    ])
+
+    return { activities, total }
   } catch (error) {
     throw new Error(error)
   }

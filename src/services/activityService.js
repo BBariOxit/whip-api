@@ -9,10 +9,10 @@ const createActivity = async (data) => {
   }
 }
 
-const getActivities = async (cardId) => {
+const getActivities = async (cardId, page, limit) => {
   try {
-    const activities = await activityModel.getActivitiesByCardId(cardId)
-    return activities
+    const result = await activityModel.getActivitiesByCardId(cardId, page, limit)
+    return result
   } catch (error) {
     throw error
   }
