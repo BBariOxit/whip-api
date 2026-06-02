@@ -1,6 +1,20 @@
 import { cardModel } from '~/models/cardModel'
 import { columnModel } from '~/models/columnModel'
 import { cloudinaryProvider } from '~/providers/CloudinaryProvider'
+import { activityModel } from '~/models/activityModel'
+import { labelModel } from '~/models/labelModel'
+import { userModel } from '~/models/userModel'
+import { CARD_MEMBER_ACTIONS, ACTIVITY_ACTION_TYPES } from '~/utils/constants'
+
+// Helper: Ghi log activity vào DB (không throw error nếu fail để không block luồng chính)
+const logActivity = async (data) => {
+  try {
+    await activityModel.createNew(data)
+  } catch (error) {
+    // eslint-disable-next-line no-console
+    console.error('Failed to log activity:', error)
+  }
+}
 
 const createNew = async (reqBody) => {
   try {
@@ -28,12 +42,27 @@ const update = async (cardId, reqBody, cardCoverFile, userInfo) => {
       updatedAt: Date.now()
     }
 
+    // Lookup user từ DB để lấy displayName (JWT token chỉ chứa _id và email)
+    const fullUser = await userModel.findOneById(userInfo._id)
+
     let updatedCard = {}
     if (cardCoverFile) {
       const uploadResult = await cloudinaryProvider.streamUpload(cardCoverFile.buffer, 'card-covers')
       updatedCard = await cardModel.update(cardId, {
         cover: uploadResult.secure_url
       })
+
+      // Log: Thay đổi ảnh bìa
+      await logActivity({
+        cardId: cardId,
+        userId: userInfo._id,
+        userEmail: userInfo.email,
+        userAvatar: userInfo.avatar || null,
+        userDisplayName: fullUser?.displayName || fullUser?.username || userInfo.email,
+        actionType: ACTIVITY_ACTION_TYPES.UPDATE_COVER,
+        content: 'đã thay đổi ảnh bìa'
+      })
+
     } else if (updateData.commentToAdd) {
       // tạo dữ liệu comment để thêm vào db, cần bổ sung những field cần thiết
       const commentData = {
@@ -44,12 +73,108 @@ const update = async (cardId, reqBody, cardCoverFile, userInfo) => {
       }
       // dùng push để thêm comment vào mảng comments
       updatedCard = await cardModel.unshiftNewComment(cardId, commentData)
+      // Comment không cần log vì comment tự nó đã là activity hiển thị
+
     } else if (updateData.incomingMemberInfo) {
       // trường hợp ADD/REMOVE cardMemberInfo
       updatedCard = await cardModel.updateMembers(cardId, updateData.incomingMemberInfo)
+
+      // Log: Thêm/xóa thành viên
+      const isAdd = updateData.incomingMemberInfo.action === CARD_MEMBER_ACTIONS.ADD
+      await logActivity({
+        cardId: cardId,
+        userId: userInfo._id,
+        userEmail: userInfo.email,
+        userAvatar: userInfo.avatar || null,
+        userDisplayName: fullUser?.displayName || fullUser?.username || userInfo.email,
+        actionType: isAdd ? ACTIVITY_ACTION_TYPES.ADD_MEMBER : ACTIVITY_ACTION_TYPES.REMOVE_MEMBER,
+        content: isAdd ? 'đã tham gia thẻ này' : 'đã rời khỏi thẻ này'
+      })
+
     } else {
-      // các trường hợp update chung như title, description, due date, comment...
+      // các trường hợp update chung như title, description, due date...
+
+      // Lấy card hiện tại TRƯỚC khi update (để so sánh labelIds cũ vs mới)
+      let cardBeforeUpdate = null
+      if (updateData.labelIds !== undefined) {
+        cardBeforeUpdate = await cardModel.findOneById(cardId)
+      }
+
       updatedCard = await cardModel.update(cardId, updateData)
+
+      // Log: Tick/bỏ tick hoàn thành ngày hạn
+      if (updateData.dueComplete !== undefined) {
+        const actionText = updateData.dueComplete
+          ? 'đã đánh dấu hoàn thành'
+          : 'đã bỏ đánh dấu hoàn thành'
+        await logActivity({
+          cardId: cardId,
+          userId: userInfo._id,
+          userEmail: userInfo.email,
+          userAvatar: userInfo.avatar || null,
+          userDisplayName: fullUser?.displayName || fullUser?.username || userInfo.email,
+          actionType: ACTIVITY_ACTION_TYPES.UPDATE_DATE,
+          content: actionText
+        })
+      }
+
+      // Log: Đặt/xóa ngày hạn
+      if (updateData.dueDate !== undefined) {
+        const actionText = updateData.dueDate
+          ? 'đã cập nhật deadline'
+          : 'đã gỡ deadline'
+        await logActivity({
+          cardId: cardId,
+          userId: userInfo._id,
+          userEmail: userInfo.email,
+          userAvatar: userInfo.avatar || null,
+          userDisplayName: fullUser?.displayName || fullUser?.username || userInfo.email,
+          actionType: ACTIVITY_ACTION_TYPES.SET_DATE,
+          content: actionText,
+          metadata: updateData.dueDate ? { newDate: updateData.dueDate } : null
+        })
+      }
+
+      // Log: Thêm/xóa nhãn (so sánh card TRƯỚC update vs SAU update)
+      if (updateData.labelIds !== undefined && cardBeforeUpdate) {
+        const oldLabelIds = (cardBeforeUpdate?.labelIds || []).map(id => id.toString())
+        const newLabelIds = (updatedCard?.labelIds || []).map(id => id.toString())
+
+        // Tìm label mới được thêm
+        const addedLabelIds = newLabelIds.filter(id => !oldLabelIds.includes(id))
+        // Tìm label bị xóa
+        const removedLabelIds = oldLabelIds.filter(id => !newLabelIds.includes(id))
+
+        // Ghi log cho từng label được thêm (kèm tên label)
+        for (const labelId of addedLabelIds) {
+          const label = await labelModel.findOneById(labelId)
+          const labelName = label?.title || 'không tên'
+          await logActivity({
+            cardId: cardId,
+            userId: userInfo._id,
+            userEmail: userInfo.email,
+            userAvatar: userInfo.avatar || null,
+            userDisplayName: fullUser?.displayName || fullUser?.username || userInfo.email,
+            actionType: ACTIVITY_ACTION_TYPES.ADD_LABEL,
+            content: `đã thêm nhãn "${labelName}"`
+          })
+        }
+
+        // Ghi log cho từng label bị xóa (kèm tên label)
+        for (const labelId of removedLabelIds) {
+          const label = await labelModel.findOneById(labelId)
+          const labelName = label?.title || 'không tên'
+          await logActivity({
+            cardId: cardId,
+            userId: userInfo._id,
+            userEmail: userInfo.email,
+            userAvatar: userInfo.avatar || null,
+            userDisplayName: fullUser?.displayName || fullUser?.username || userInfo.email,
+            actionType: ACTIVITY_ACTION_TYPES.REMOVE_LABEL,
+            content: `đã xóa nhãn "${labelName}"`
+          })
+        }
+      }
     }
 
     return updatedCard
