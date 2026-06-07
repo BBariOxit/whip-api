@@ -30,6 +30,21 @@ const CARD_COLLECTION_SCHEMA = Joi.object({
   dueDate: Joi.date().timestamp('javascript').default(null).allow(null),
   dueComplete: Joi.boolean().default(false),
 
+  // Checklist subdocuments - mỗi card chứa mảng checklists, mỗi checklist chứa mảng items
+  checklists: Joi.array().items(
+    Joi.object({
+      _id: Joi.string().required(),
+      title: Joi.string().required().min(1).max(100).trim().strict(),
+      items: Joi.array().items(
+        Joi.object({
+          _id: Joi.string().required(),
+          title: Joi.string().required().min(1).max(500).trim().strict(),
+          isCompleted: Joi.boolean().default(false)
+        })
+      ).default([])
+    })
+  ).default([]),
+
   createdAt: Joi.date().timestamp('javascript').default(Date.now),
   updatedAt: Joi.date().timestamp('javascript').default(null),
   _destroy: Joi.boolean().default(false)
