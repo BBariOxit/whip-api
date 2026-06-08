@@ -181,7 +181,77 @@ const update = async (cardId, reqBody, cardCoverFile, userInfo) => {
   } catch (error) { throw error }
 }
 
+const uploadAttachment = async (cardId, file, userInfo) => {
+  try {
+    // Lookup user từ DB để lấy displayName
+    const fullUser = await userModel.findOneById(userInfo._id)
+
+    // Upload file lên Cloudinary với resource_type auto (Cloudinary tự nhận diện ảnh hay raw)
+    const uploadResult = await cloudinaryProvider.streamUpload(file.buffer, 'card-attachments')
+
+    // Lấy format từ originalname (vì Cloudinary với raw file không trả về format)
+    const originalFormat = file.originalname.split('.').pop().toLowerCase()
+
+    // Tạo object attachment metadata
+    const attachment = {
+      url: uploadResult.secure_url,
+      publicId: uploadResult.public_id,
+      filename: file.originalname,
+      format: uploadResult.format || originalFormat,
+      createdAt: Date.now()
+    }
+
+    // Push attachment vào mảng attachments của card
+    const updatedCard = await cardModel.pushNewAttachment(cardId, attachment)
+
+    // Log activity
+    await logActivity({
+      cardId: cardId,
+      userId: userInfo._id,
+      userEmail: userInfo.email,
+      userAvatar: userInfo.avatar || null,
+      userDisplayName: fullUser?.displayName || fullUser?.username || userInfo.email,
+      actionType: ACTIVITY_ACTION_TYPES.ADD_ATTACHMENT,
+      content: `đã đính kèm "${file.originalname}"`
+    })
+
+    return updatedCard
+  } catch (error) { throw error }
+}
+
+const deleteAttachment = async (cardId, publicId, userInfo) => {
+  try {
+    const fullUser = await userModel.findOneById(userInfo._id)
+
+    // Tìm card hiện tại để lấy filename (cho log activity)
+    const currentCard = await cardModel.findOneById(cardId)
+    const attachment = currentCard?.attachments?.find(att => att.publicId === publicId)
+    const filename = attachment?.filename || 'file'
+
+    // Xóa file vật lý trên Cloudinary
+    await cloudinaryProvider.deleteResource(publicId)
+
+    // Xóa attachment khỏi mảng trong DB
+    const updatedCard = await cardModel.pullAttachment(cardId, publicId)
+
+    // Log activity
+    await logActivity({
+      cardId: cardId,
+      userId: userInfo._id,
+      userEmail: userInfo.email,
+      userAvatar: userInfo.avatar || null,
+      userDisplayName: fullUser?.displayName || fullUser?.username || userInfo.email,
+      actionType: ACTIVITY_ACTION_TYPES.REMOVE_ATTACHMENT,
+      content: `đã xóa file đính kèm "${filename}"`
+    })
+
+    return updatedCard
+  } catch (error) { throw error }
+}
+
 export const cardService = {
   createNew,
-  update
+  update,
+  uploadAttachment,
+  deleteAttachment
 }

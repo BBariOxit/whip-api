@@ -15,4 +15,13 @@ Router.route('/:id')
     multerUploadMiddleware.upload.single('cardCover'),
     cardValidation.update,
     cardController.update)
+
+// Attachment APIs: Upload và Xóa file đính kèm
+Router.route('/:id/attachments')
+  .post(
+    authMiddleware.isAuthorized,
+    multerUploadMiddleware.uploadAttachment.single('attachmentFile'),
+    cardController.uploadAttachment)
+  .delete(authMiddleware.isAuthorized, cardController.deleteAttachment)
+
 export const cardRouter = Router

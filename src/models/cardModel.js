@@ -45,6 +45,17 @@ const CARD_COLLECTION_SCHEMA = Joi.object({
     })
   ).default([]),
 
+  // Attachments - file đính kèm nhúng vào bản ghi Card
+  attachments: Joi.array().items(
+    Joi.object({
+      url: Joi.string().required(),           // Link file trên Cloudinary
+      publicId: Joi.string().required(),      // Cloudinary public_id (để xóa file)
+      filename: Joi.string().required(),      // Tên file gốc (vd: tailieu.pdf)
+      format: Joi.string().required(),        // Định dạng (png, jpg, pdf...)
+      createdAt: Joi.date().timestamp('javascript').default(Date.now)
+    })
+  ).default([]),
+
   createdAt: Joi.date().timestamp('javascript').default(Date.now),
   updatedAt: Joi.date().timestamp('javascript').default(null),
   _destroy: Joi.boolean().default(false)
@@ -183,6 +194,38 @@ const pullLabelFromCards = async (boardId, labelId) => {
   }
 }
 
+/**
+ * Đẩy một attachment mới vào cuối mảng attachments của card
+ */
+const pushNewAttachment = async (cardId, attachment) => {
+  try {
+    const result = await GET_DB().collection(CARD_COLLECTION_NAME).findOneAndUpdate(
+      { _id: new ObjectId(cardId) },
+      { $push: { attachments: attachment } },
+      { returnDocument: 'after' }
+    )
+    return result
+  } catch (error) {
+    throw new Error(error)
+  }
+}
+
+/**
+ * Xóa một attachment khỏi mảng attachments dựa theo publicId
+ */
+const pullAttachment = async (cardId, publicId) => {
+  try {
+    const result = await GET_DB().collection(CARD_COLLECTION_NAME).findOneAndUpdate(
+      { _id: new ObjectId(cardId) },
+      { $pull: { attachments: { publicId: publicId } } },
+      { returnDocument: 'after' }
+    )
+    return result
+  } catch (error) {
+    throw new Error(error)
+  }
+}
+
 export const cardModel = {
   CARD_COLLECTION_NAME,
   CARD_COLLECTION_SCHEMA,
@@ -192,5 +235,7 @@ export const cardModel = {
   deleteManyByColumnId,
   unshiftNewComment,
   updateMembers,
-  pullLabelFromCards
+  pullLabelFromCards,
+  pushNewAttachment,
+  pullAttachment
 }
