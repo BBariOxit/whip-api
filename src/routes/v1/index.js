@@ -7,6 +7,7 @@ import { userRoute } from './userRoute'
 import { invitationRoute } from './invitationRoute'
 import { labelRouter } from './labelRoute'
 import { activityRouter } from './activityRoute'
+import { customFieldRouter } from './customFieldRoute'
 
 const Router = express.Router()
 //check APIs v1/status
@@ -15,6 +16,7 @@ Router.get('/status', (req, res) => {
 })
 // Board APIs
 Router.use('/boards', boardRouter)
+Router.use('/boards/:boardId/custom-fields', customFieldRouter)
 // Column APIs
 Router.use('/columns', columnRouter)
 // Card APIs
