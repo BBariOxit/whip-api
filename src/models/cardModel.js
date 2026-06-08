@@ -56,6 +56,14 @@ const CARD_COLLECTION_SCHEMA = Joi.object({
     })
   ).default([]),
 
+  // Custom field values
+  customFieldValues: Joi.array().items(
+    Joi.object({
+      customFieldId: Joi.string().required(),
+      value: Joi.any().allow(null, '')
+    })
+  ).default([]),
+
   createdAt: Joi.date().timestamp('javascript').default(Date.now),
   updatedAt: Joi.date().timestamp('javascript').default(null),
   _destroy: Joi.boolean().default(false)
@@ -226,6 +234,18 @@ const pullAttachment = async (cardId, publicId) => {
   }
 }
 
+const pullCustomFieldValues = async (boardId, fieldId) => {
+  try {
+    const result = await GET_DB().collection(CARD_COLLECTION_NAME).updateMany(
+      { boardId: new ObjectId(boardId) },
+      { $pull: { customFieldValues: { customFieldId: fieldId } } }
+    )
+    return result
+  } catch (error) {
+    throw new Error(error)
+  }
+}
+
 export const cardModel = {
   CARD_COLLECTION_NAME,
   CARD_COLLECTION_SCHEMA,
@@ -237,5 +257,6 @@ export const cardModel = {
   updateMembers,
   pullLabelFromCards,
   pushNewAttachment,
-  pullAttachment
+  pullAttachment,
+  pullCustomFieldValues
 }

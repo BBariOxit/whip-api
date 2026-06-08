@@ -32,6 +32,22 @@ const BOARD_COLLECTION_SCHEMA = Joi.object({
     Joi.string().pattern(OBJECT_ID_RULE).message(OBJECT_ID_RULE_MESSAGE)
   ).default([]),
 
+  customFields: Joi.array().items(
+    Joi.object({
+      _id: Joi.string().required(),
+      name: Joi.string().required().trim().strict(),
+      type: Joi.string().valid('text', 'number', 'checkbox', 'dropdown', 'date').required(),
+      options: Joi.array().items(
+        Joi.object({
+          _id: Joi.string().required(),
+          text: Joi.string().required().trim().strict(),
+          color: Joi.string().optional()
+        })
+      ).default([]),
+      showOnFront: Joi.boolean().default(false)
+    })
+  ).default([]),
+
   createAt: Joi.date().timestamp('javascript').default(Date.now),
   updateAt: Joi.date().timestamp('javascript').default(null),
   _destroy: Joi.boolean().default(false)
@@ -250,6 +266,53 @@ const pushMemberIds = async (boardId, userId) => {
   }
 }
 
+const pushCustomField = async (boardId, customField) => {
+  try {
+    const result = await GET_DB().collection(BOARD_COLLECTION_NAME).findOneAndUpdate(
+      { _id: new ObjectId(boardId) },
+      { $push: { customFields: customField } },
+      { returnDocument: 'after' }
+    )
+    return result
+  } catch (error) {
+    throw new Error(error)
+  }
+}
+
+const updateCustomField = async (boardId, fieldId, updateData) => {
+  try {
+    const setConditions = {}
+    if (updateData.name !== undefined) setConditions['customFields.$[elem].name'] = updateData.name
+    if (updateData.options !== undefined) setConditions['customFields.$[elem].options'] = updateData.options
+    if (updateData.showOnFront !== undefined) setConditions['customFields.$[elem].showOnFront'] = updateData.showOnFront
+
+    const result = await GET_DB().collection(BOARD_COLLECTION_NAME).findOneAndUpdate(
+      { _id: new ObjectId(boardId) },
+      { $set: setConditions },
+      {
+        arrayFilters: [{ 'elem._id': fieldId }],
+        returnDocument: 'after'
+      }
+    )
+    return result
+  } catch (error) {
+    throw new Error(error)
+  }
+}
+
+const pullCustomField = async (boardId, fieldId) => {
+  try {
+    const result = await GET_DB().collection(BOARD_COLLECTION_NAME).findOneAndUpdate(
+      { _id: new ObjectId(boardId) },
+      { $pull: { customFields: { _id: fieldId } } },
+      { returnDocument: 'after' }
+    )
+    return result
+  } catch (error) {
+    throw new Error(error)
+  }
+}
+
 export const boardModel = {
   BOARD_COLLECTION_NAME,
   BOARD_COLLECTION_SCHEMA,
@@ -260,5 +323,8 @@ export const boardModel = {
   update,
   pullColumnOrderIds,
   getBoards,
-  pushMemberIds
+  pushMemberIds,
+  pushCustomField,
+  updateCustomField,
+  pullCustomField
 }
