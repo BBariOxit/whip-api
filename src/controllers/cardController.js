@@ -23,7 +23,31 @@ const update = async (req, res, next) => {
   } catch (error) { next(error) }
 }
 
+const uploadAttachment = async (req, res, next) => {
+  try {
+    const cardId = req.params.id
+    const attachmentFile = req.file
+    const userInfo = req.jwtDecoded
+    const updatedCard = await cardService.uploadAttachment(cardId, attachmentFile, userInfo)
+
+    res.status(StatusCodes.OK).json(updatedCard)
+  } catch (error) { next(error) }
+}
+
+const deleteAttachment = async (req, res, next) => {
+  try {
+    const cardId = req.params.id
+    const { publicId } = req.body
+    const userInfo = req.jwtDecoded
+    const updatedCard = await cardService.deleteAttachment(cardId, publicId, userInfo)
+
+    res.status(StatusCodes.OK).json(updatedCard)
+  } catch (error) { next(error) }
+}
+
 export const cardController = {
   createNew,
-  update
+  update,
+  uploadAttachment,
+  deleteAttachment
 }

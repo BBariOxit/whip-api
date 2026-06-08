@@ -11,18 +11,38 @@ cloudinaryV2.config({
 })
 
 // khởi tạo function upload file lên cloudinary
-const streamUpload = (fileBuffer, folderName) => {
+// resource_type: 'auto' để Cloudinary tự nhận diện file là ảnh hay raw file (pdf, doc...)
+const streamUpload = (fileBuffer, folderName, resourceType = 'auto') => {
   return new Promise((resolve, reject) => {
     // tạo file writable stream để ghi dữ liệu lên cloudinary
-    const stream = cloudinaryV2.uploader.upload_stream({ folder: folderName }, (err, result) => {
-      if (err) reject(err)
-      else resolve(result)
-    })
-  // thực hiện upload cái luồng trên bằng lib streamifier
-  streamifier.createReadStream(fileBuffer).pipe(stream)
-})
+    const stream = cloudinaryV2.uploader.upload_stream(
+      { folder: folderName, resource_type: resourceType },
+      (err, result) => {
+        if (err) reject(err)
+        else resolve(result)
+      }
+    )
+    // thực hiện upload cái luồng trên bằng lib streamifier
+    streamifier.createReadStream(fileBuffer).pipe(stream)
+  })
+}
+
+// Xóa file trên Cloudinary bằng publicId — tránh để rác đầy Cloudinary
+const deleteResource = async (publicId) => {
+  try {
+    // Thử xóa dạng image trước
+    const result = await cloudinaryV2.uploader.destroy(publicId)
+    // Nếu Cloudinary trả về "not found" thì thử xóa dạng raw (pdf, doc, zip...)
+    if (result.result === 'not found') {
+      return await cloudinaryV2.uploader.destroy(publicId, { resource_type: 'raw' })
+    }
+    return result
+  } catch (error) {
+    throw new Error(error)
+  }
 }
 
 export const cloudinaryProvider = {
-  streamUpload
+  streamUpload,
+  deleteResource
 }
