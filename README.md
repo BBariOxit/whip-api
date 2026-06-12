@@ -4,7 +4,7 @@
 ![Build](https://img.shields.io/badge/build-passing-brightgreen.svg)
 ![License](https://img.shields.io/badge/license-MIT-green.svg)
 
-![Node.js](https://img.shields.io/badge/Node.js-18.x-339933?logo=nodedotjs&logoColor=white&labelColor=333333) ![Express](https://img.shields.io/badge/Express-4.18-000000?logo=express&logoColor=white&labelColor=333333) ![MongoDB](https://img.shields.io/badge/MongoDB-7.0-47A248?logo=mongodb&logoColor=white&labelColor=333333) ![JWT](https://img.shields.io/badge/Auth-JWT-000000?logo=jsonwebtokens&logoColor=white&labelColor=333333) ![Cloudinary](https://img.shields.io/badge/Media-Cloudinary-3448C5?logo=cloudinary&logoColor=white&labelColor=333333) ![Socket.io](https://img.shields.io/badge/Realtime-Socket.io-010101?logo=socket.io&logoColor=white&labelColor=333333)
+![Node.js](https://img.shields.io/badge/Node.js-20.x-339933?logo=nodedotjs&logoColor=white&labelColor=333333) ![Express](https://img.shields.io/badge/Express-4.18-000000?logo=express&logoColor=white&labelColor=333333) ![MongoDB](https://img.shields.io/badge/MongoDB-7.0-47A248?logo=mongodb&logoColor=white&labelColor=333333) ![JWT](https://img.shields.io/badge/Auth-JWT-000000?logo=jsonwebtokens&logoColor=white&labelColor=333333) ![Cloudinary](https://img.shields.io/badge/Media-Cloudinary-3448C5?logo=cloudinary&logoColor=white&labelColor=333333) ![Socket.io](https://img.shields.io/badge/Realtime-Socket.io-010101?logo=socket.io&logoColor=white&labelColor=333333)
 
 ## 🎯 Introduction
 Whip API is the backend engine powering the Whip App. It handles all complex business logic, database operations, robust authentication, and real-time connectivity to provide a seamless experience for the frontend application.
