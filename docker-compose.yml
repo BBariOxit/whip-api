@@ -1,0 +1,31 @@
+version: '3.8'
+
+services:
+  whip-api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: whip-api
+    restart: always
+    ports:
+      - "8017:8017"
+    environment:
+      - PORT=8017
+      - BUILD_MODE=production
+      - MONGODB_URI=${MONGODB_URI}
+      - DATABASE_NAME=${DATABASE_NAME}
+      - AUTHOR=${AUTHOR}
+      - WEBSITE_DOMAIN_PRODUCTION=${WEBSITE_DOMAIN_PRODUCTION}
+      - RESEND_API_KEY=${RESEND_API_KEY}
+      - ADMIN_EMAIL_ADDRESS=${ADMIN_EMAIL_ADDRESS}
+      - ADMIN_EMAIL_NAME=${ADMIN_EMAIL_NAME}
+      - ACCESS_TOKEN_SECRET_SIGNATURE=${ACCESS_TOKEN_SECRET_SIGNATURE}
+      - ACCESS_TOKEN_LIFE=${ACCESS_TOKEN_LIFE}
+      - REFRESH_TOKEN_SECRET_SIGNATURE=${REFRESH_TOKEN_SECRET_SIGNATURE}
+      - REFRESH_TOKEN_LIFE=${REFRESH_TOKEN_LIFE}
+      - CLOUDINARY_CLOUD_NAME=${CLOUDINARY_CLOUD_NAME}
+      - CLOUDINARY_API_KEY=${CLOUDINARY_API_KEY}
+      - CLOUDINARY_API_SECRET=${CLOUDINARY_API_SECRET}
+      - BREVO_API_KEY=${BREVO_API_KEY}
+    env_file:
+      - .env
