@@ -63,18 +63,6 @@ const update = async (cardId, reqBody, cardCoverFile, userInfo) => {
         content: 'đã thay đổi ảnh bìa'
       })
 
-    } else if (updateData.commentToAdd) {
-      // tạo dữ liệu comment để thêm vào db, cần bổ sung những field cần thiết
-      const commentData = {
-        ...updateData.commentToAdd,
-        commentedAt: Date.now(),
-        userId: userInfo._id,
-        userEmail: userInfo.email
-      }
-      // dùng push để thêm comment vào mảng comments
-      updatedCard = await cardModel.unshiftNewComment(cardId, commentData)
-      // Comment không cần log vì comment tự nó đã là activity hiển thị
-
     } else if (updateData.incomingMemberInfo) {
       // trường hợp ADD/REMOVE cardMemberInfo
       updatedCard = await cardModel.updateMembers(cardId, updateData.incomingMemberInfo)
