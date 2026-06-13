@@ -8,6 +8,7 @@ import { invitationRoute } from './invitationRoute'
 import { labelRouter } from './labelRoute'
 import { activityRouter } from './activityRoute'
 import { customFieldRouter } from './customFieldRoute'
+import { commentRouter } from './commentRoute'
 
 const Router = express.Router()
 //check APIs v1/status
@@ -32,5 +33,8 @@ Router.use('/labels', labelRouter)
 
 // Activity APIs
 Router.use('/activities', activityRouter)
+
+// Comment APIs
+Router.use('/comments', commentRouter)
 
 export const APIs_V1 = Router
