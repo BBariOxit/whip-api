@@ -15,6 +15,9 @@ const CARD_COLLECTION_SCHEMA = Joi.object({
   cover: Joi.string().default(null),
   memberIds: Joi.array().items(Joi.string().pattern(OBJECT_ID_RULE).message(OBJECT_ID_RULE_MESSAGE)).default([]),
   labelIds: Joi.array().items(Joi.string().pattern(OBJECT_ID_RULE).message(OBJECT_ID_RULE_MESSAGE)).default([]),
+  
+  // Tổng số lượng comment của card (denormalized)
+  totalComments: Joi.number().default(0),
 
   // Due date fields
   dueDate: Joi.date().timestamp('javascript').default(null).allow(null),
@@ -132,6 +135,18 @@ const deleteManyByColumnId = async (columnId) => {
   }
 }
 
+const incrementTotalComments = async (cardId) => {
+  try {
+    const result = await GET_DB().collection(CARD_COLLECTION_NAME).findOneAndUpdate(
+      { _id: new ObjectId(cardId) },
+      { $inc: { totalComments: 1 } },
+      { returnDocument: 'after' }
+    )
+    return result
+  } catch (error) {
+    throw new Error(error)
+  }
+}
 
 /**
  * Hàm này sẽ có nhiệm vụ xử lý cập nhật thêm hoặc xóa member khỏi card dựa theo
@@ -225,6 +240,7 @@ export const cardModel = {
   update,
   deleteManyByColumnId,
   updateMembers,
+  incrementTotalComments,
   pullLabelFromCards,
   pushNewAttachment,
   pullAttachment,

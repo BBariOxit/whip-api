@@ -16,6 +16,9 @@ const COMMENT_COLLECTION_SCHEMA = Joi.object({
   // Trỏ về comment gốc nếu đây là một reply
   parentId: Joi.string().pattern(OBJECT_ID_RULE).message(OBJECT_ID_RULE_MESSAGE).allow(null).default(null),
   
+  // Tag tên người bị reply (Hệ phái 2)
+  replyToUserDisplayName: Joi.string().allow(null).default(null),
+  
   // Tổng số lượt phản hồi cho comment này
   replyCount: Joi.number().default(0),
 

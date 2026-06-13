@@ -7,7 +7,8 @@ const createNew = async (req, res, next) => {
   const correctCondition = Joi.object({
     cardId: Joi.string().required().pattern(OBJECT_ID_RULE).message(OBJECT_ID_RULE_MESSAGE),
     content: Joi.string().required().trim().strict(),
-    parentId: Joi.string().pattern(OBJECT_ID_RULE).message(OBJECT_ID_RULE_MESSAGE).allow(null).optional()
+    parentId: Joi.string().pattern(OBJECT_ID_RULE).message(OBJECT_ID_RULE_MESSAGE).allow(null).optional(),
+    replyToUserDisplayName: Joi.string().allow(null).optional()
   })
 
   try {

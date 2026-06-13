@@ -1,5 +1,6 @@
 import { commentModel } from '~/models/commentModel'
 import { userModel } from '~/models/userModel'
+import { cardModel } from '~/models/cardModel'
 
 const createNew = async (reqBody, userInfo) => {
   try {
@@ -34,6 +35,9 @@ const createNew = async (reqBody, userInfo) => {
     if (newCommentData.parentId) {
       await commentModel.incrementReplyCount(newCommentData.parentId)
     }
+
+    // 6. Tăng tổng số comment của Card để hiển thị icon ngoài giao diện
+    await cardModel.incrementTotalComments(newCommentData.cardId)
 
     return getNewComment
   } catch (error) {
