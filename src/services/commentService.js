@@ -63,8 +63,59 @@ const getReplies = async (parentId, page, limit) => {
   }
 }
 
+const updateComment = async (commentId, reqBody, userInfo) => {
+  try {
+    const targetComment = await commentModel.findOneById(commentId)
+    if (!targetComment) throw new Error('Comment không tồn tại!')
+
+    if (targetComment.userId.toString() !== userInfo._id.toString()) {
+      throw new Error('Bạn không có quyền sửa comment này!')
+    }
+
+    const updateData = {
+      content: reqBody.content,
+      updatedAt: Date.now()
+    }
+
+    const updatedComment = await commentModel.update(commentId, updateData)
+    return updatedComment
+  } catch (error) {
+    throw error
+  }
+}
+
+const deleteComment = async (commentId, userInfo) => {
+  try {
+    const targetComment = await commentModel.findOneById(commentId)
+    if (!targetComment) throw new Error('Comment không tồn tại!')
+
+    if (targetComment.userId.toString() !== userInfo._id.toString()) {
+      throw new Error('Bạn không có quyền xóa comment này!')
+    }
+
+    if (targetComment.parentId) {
+      // Là comment con: Xóa nó, giảm replyCount của comment gốc, giảm totalComments của card đi 1
+      await commentModel.deleteById(commentId)
+      await commentModel.decrementReplyCount(targetComment.parentId)
+      await cardModel.decrementTotalComments(targetComment.cardId, 1)
+    } else {
+      // Là comment gốc: Xóa hết các comment con, đếm số comment con đã xóa
+      const deletedRepliesCount = await commentModel.deleteManyByParentId(commentId)
+      await commentModel.deleteById(commentId)
+      // Giảm totalComments của card: 1 (cho comment gốc) + số lượng comment con đã xóa
+      await cardModel.decrementTotalComments(targetComment.cardId, 1 + deletedRepliesCount)
+    }
+
+    return { resultMessage: 'Xóa bình luận thành công!' }
+  } catch (error) {
+    throw error
+  }
+}
+
 export const commentService = {
   createNew,
   getComments,
-  getReplies
+  getReplies,
+  updateComment,
+  deleteComment
 }

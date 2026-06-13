@@ -48,8 +48,36 @@ const getReplies = async (req, res, next) => {
   }
 }
 
+const updateComment = async (req, res, next) => {
+  const correctCondition = Joi.object({
+    content: Joi.string().required().trim().strict()
+  })
+
+  try {
+    await correctCondition.validateAsync(req.body, { abortEarly: false, allowUnknown: true })
+    next()
+  } catch (error) {
+    next(new ApiError(StatusCodes.UNPROCESSABLE_ENTITY, new Error(error).message))
+  }
+}
+
+const deleteComment = async (req, res, next) => {
+  const correctCondition = Joi.object({
+    id: Joi.string().required().pattern(OBJECT_ID_RULE).message(OBJECT_ID_RULE_MESSAGE)
+  })
+
+  try {
+    await correctCondition.validateAsync(req.params, { abortEarly: false })
+    next()
+  } catch (error) {
+    next(new ApiError(StatusCodes.UNPROCESSABLE_ENTITY, new Error(error).message))
+  }
+}
+
 export const commentValidation = {
   createNew,
   getComments,
-  getReplies
+  getReplies,
+  updateComment,
+  deleteComment
 }

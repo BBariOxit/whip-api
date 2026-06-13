@@ -113,6 +113,52 @@ const incrementReplyCount = async (commentId) => {
   }
 }
 
+const decrementReplyCount = async (commentId) => {
+  try {
+    await GET_DB().collection(COMMENT_COLLECTION_NAME).updateOne(
+      { _id: new ObjectId(commentId) },
+      { $inc: { replyCount: -1 } }
+    )
+  } catch (error) {
+    throw new Error(error)
+  }
+}
+
+const update = async (commentId, updateData) => {
+  try {
+    const result = await GET_DB().collection(COMMENT_COLLECTION_NAME).findOneAndUpdate(
+      { _id: new ObjectId(commentId) },
+      { $set: updateData },
+      { returnDocument: 'after' }
+    )
+    return result
+  } catch (error) {
+    throw new Error(error)
+  }
+}
+
+const deleteById = async (commentId) => {
+  try {
+    const result = await GET_DB().collection(COMMENT_COLLECTION_NAME).deleteOne({
+      _id: new ObjectId(commentId)
+    })
+    return result
+  } catch (error) {
+    throw new Error(error)
+  }
+}
+
+const deleteManyByParentId = async (parentId) => {
+  try {
+    const result = await GET_DB().collection(COMMENT_COLLECTION_NAME).deleteMany({
+      parentId: new ObjectId(parentId)
+    })
+    return result.deletedCount
+  } catch (error) {
+    throw new Error(error)
+  }
+}
+
 export const commentModel = {
   COMMENT_COLLECTION_NAME,
   COMMENT_COLLECTION_SCHEMA,
@@ -120,5 +166,9 @@ export const commentModel = {
   findOneById,
   getCommentsByCardId,
   getRepliesByParentId,
-  incrementReplyCount
+  incrementReplyCount,
+  decrementReplyCount,
+  update,
+  deleteById,
+  deleteManyByParentId
 }

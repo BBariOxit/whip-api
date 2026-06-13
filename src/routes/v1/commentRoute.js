@@ -12,4 +12,8 @@ Router.route('/')
 Router.route('/:parentId/replies')
   .get(authMiddleware.isAuthorized, commentValidation.getReplies, commentController.getReplies)
 
+Router.route('/:id')
+  .put(authMiddleware.isAuthorized, commentValidation.updateComment, commentController.updateComment)
+  .delete(authMiddleware.isAuthorized, commentValidation.deleteComment, commentController.deleteComment)
+
 export const commentRouter = Router

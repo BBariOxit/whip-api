@@ -148,6 +148,19 @@ const incrementTotalComments = async (cardId) => {
   }
 }
 
+const decrementTotalComments = async (cardId, amount) => {
+  try {
+    const result = await GET_DB().collection(CARD_COLLECTION_NAME).findOneAndUpdate(
+      { _id: new ObjectId(cardId) },
+      { $inc: { totalComments: -amount } },
+      { returnDocument: 'after' }
+    )
+    return result
+  } catch (error) {
+    throw new Error(error)
+  }
+}
+
 /**
  * Hàm này sẽ có nhiệm vụ xử lý cập nhật thêm hoặc xóa member khỏi card dựa theo
 Action
@@ -241,6 +254,7 @@ export const cardModel = {
   deleteManyByColumnId,
   updateMembers,
   incrementTotalComments,
+  decrementTotalComments,
   pullLabelFromCards,
   pushNewAttachment,
   pullAttachment,

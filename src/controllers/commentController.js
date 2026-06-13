@@ -31,8 +31,30 @@ const getReplies = async (req, res, next) => {
   }
 }
 
+const updateComment = async (req, res, next) => {
+  try {
+    const { id } = req.params
+    const updatedComment = await commentService.updateComment(id, req.body, req.jwtDecoded)
+    res.status(StatusCodes.OK).json(updatedComment)
+  } catch (error) {
+    next(error)
+  }
+}
+
+const deleteComment = async (req, res, next) => {
+  try {
+    const { id } = req.params
+    const result = await commentService.deleteComment(id, req.jwtDecoded)
+    res.status(StatusCodes.OK).json(result)
+  } catch (error) {
+    next(error)
+  }
+}
+
 export const commentController = {
   createNew,
   getComments,
-  getReplies
+  getReplies,
+  updateComment,
+  deleteComment
 }
