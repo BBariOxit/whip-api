@@ -13,7 +13,8 @@
     "build-babel": "babel ./src -d ./build/src",
     "build": "npm run clean && npm run build-babel",
     "production": "cross-env BUILD_MODE=production node ./build/src/server.js",
-    "dev": "cross-env BUILD_MODE=dev nodemon --exec babel-node ./src/server.js"
+    "dev": "cross-env BUILD_MODE=dev nodemon --exec babel-node ./src/server.js",
+    "docker:push": "docker buildx build --platform linux/amd64,linux/arm64 -t bbarioxit/whip-api:latest --push ."
   },
   "dependencies": {
     "@babel/runtime": "^7.22.10",
