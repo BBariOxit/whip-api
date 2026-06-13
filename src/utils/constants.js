@@ -6,8 +6,10 @@ export const WHITELIST_DOMAINS = [
   // 'http://localhost:5173'
   // khi deploy lên domain chính thức
   'https://whip-app-ebon.vercel.app',
-  'https://whip.cobweb.id.vn'
+  'https://whip.cobweb.id.vn',
+  'https://whip.id.vn'
 ]
+
 
 export const BOARD_TYPES = {
   PUBLIC: 'public',
