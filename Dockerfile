@@ -40,4 +40,5 @@ COPY --from=builder /app/build ./build
 EXPOSE 8017
 
 # Start the application
-CMD ["npm", "run", "production"]
+CMD ["node", "build/src/server.js"]
+
