@@ -106,7 +106,11 @@ const deleteComment = async (commentId, userInfo) => {
       await cardModel.decrementTotalComments(targetComment.cardId, 1 + deletedRepliesCount)
     }
 
-    return { resultMessage: 'Xóa bình luận thành công!' }
+    return {
+      resultMessage: 'Xóa bình luận thành công!',
+      cardId: targetComment.cardId.toString(),
+      parentId: targetComment.parentId ? targetComment.parentId.toString() : null
+    }
   } catch (error) {
     throw error
   }
