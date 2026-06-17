@@ -3,7 +3,7 @@ name: CI/CD Pipeline - Deploy to Oracle ARM
 # Kịch bản này sẽ tự động nổ máy khi PUSH hoặc MERGE code vào nhánh main
 on:
   push:
-    branches: [ "main" ]
+    branches: [ "master" ]
 
 jobs:
   build-and-deploy:
