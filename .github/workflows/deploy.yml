@@ -1,0 +1,50 @@
+name: CI/CD Pipeline - Deploy to Oracle ARM
+
+# Kịch bản này sẽ tự động nổ máy khi PUSH hoặc MERGE code vào nhánh main
+on:
+  push:
+    branches: [ "main" ]
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+    # 1. Kéo code mới nhất trên GitHub về máy ảo của GitHub Actions
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    # 2. Khởi tạo trình build đa kiến trúc (để đóng gói bản ARM64 cho VPS Oracle)
+    - name: Set up QEMU
+      uses: docker/setup-qemu-action@v3
+
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v3
+
+    # 3. Đăng nhập vào Docker Hub bằng bảo mật (Secrets)
+    - name: Login to Docker Hub
+      uses: docker/login-action@v3
+      with:
+        username: ${{ secrets.DOCKERHUB_USERNAME }}
+        password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+    # 4. Ép máy chủ GitHub tự Build bản ARM/AMD rồi tự push lên Docker Hub đè lên bản cũ
+    - name: Build and push Docker image
+      uses: docker/build-push-action@v6
+      with:
+        context: .
+        platforms: linux/amd64,linux/arm64
+        push: true
+        tags: ${{ secrets.DOCKERHUB_USERNAME }}/whip-api:latest
+
+    # 5. Dùng SSH bắn lệnh vào VPS Oracle để tự động deploy bản mới
+    - name: Executing remote SSH commands to deploy
+      uses: appleboy/ssh-action@v1.0.3
+      with:
+        host: ${{ secrets.VPS_HOST }}
+        username: ${{ secrets.VPS_USERNAME }}
+        key: ${{ secrets.VPS_SSH_KEY }}
+        script: |
+          cd ~/whip-docker
+          sudo docker compose pull
+          sudo docker compose up -d
