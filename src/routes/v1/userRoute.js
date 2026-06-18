@@ -15,6 +15,12 @@ Router.route('/verify')
 Router.route('/login')
   .post(userValidation.login, userController.login)
 
+Router.route('/google-login')
+  .post(userController.googleLogin)
+
+Router.route('/github-login')
+  .post(userController.githubLogin)
+
 Router.route('/logout')
   .delete(userController.logout)
 

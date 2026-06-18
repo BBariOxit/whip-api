@@ -79,11 +79,63 @@ const update = async (req, res, next) => {
   } catch (error) { next(error) }
 }
 
+/**
+ * Google Login Controller
+ */
+const googleLogin = async (req, res, next) => {
+  try {
+    const result = await userService.googleLogin(req.body.credential)
+
+    // Set cookies giống hệt hàm login
+    res.cookie('accessToken', result.accessToken, {
+      httpOnly: true,
+      secure: true,
+      sameSite: 'none',
+      maxAge: ms('14 days')
+    })
+    res.cookie('refreshToken', result.refreshToken, {
+      httpOnly: true,
+      secure: true,
+      sameSite: 'none',
+      maxAge: ms('14 days')
+    })
+
+    res.status(StatusCodes.OK).json(result)
+  } catch (error) { next(error) }
+}
+
+/**
+ * GitHub Login Controller
+ */
+const githubLogin = async (req, res, next) => {
+  try {
+    const result = await userService.githubLogin(req.body.code)
+
+    // Set cookies giống hệt hàm login
+    res.cookie('accessToken', result.accessToken, {
+      httpOnly: true,
+      secure: true,
+      sameSite: 'none',
+      maxAge: ms('14 days')
+    })
+    res.cookie('refreshToken', result.refreshToken, {
+      httpOnly: true,
+      secure: true,
+      sameSite: 'none',
+      maxAge: ms('14 days')
+    })
+
+    res.status(StatusCodes.OK).json(result)
+  } catch (error) { next(error) }
+}
+
 export const userController = {
   createNew,
   verifyAccount,
   login,
   logout,
   refreshToken,
-  update
+  update,
+  googleLogin,
+  githubLogin
 }

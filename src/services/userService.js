@@ -180,10 +180,155 @@ const update = async (userId, reqBody, userAvatarFile) => {
   } catch (error) { throw error }
 }
 
+/**
+ * Helper function dùng chung: tạo tokens cho OAuth user
+ */
+const _generateTokensForOAuthUser = async (user) => {
+  const userInfo = { _id: user._id, email: user.email }
+
+  const accessToken = await jwtProvider.generateToken(
+    userInfo,
+    env.ACCESS_TOKEN_SECRET_SIGNATURE,
+    env.ACCESS_TOKEN_LIFE
+  )
+  const refreshToken = await jwtProvider.generateToken(
+    userInfo,
+    env.REFRESH_TOKEN_SECRET_SIGNATURE,
+    env.REFRESH_TOKEN_LIFE
+  )
+
+  return { accessToken, refreshToken, ...pickUser(user) }
+}
+
+/**
+ * Google Login - Dùng access_token từ Google để lấy user info và đăng nhập / tạo user mới
+ */
+const googleLogin = async (accessToken) => {
+  try {
+    // Lấy user info từ Google bằng access_token
+    const userInfoResponse = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
+      headers: { 'Authorization': `Bearer ${accessToken}` }
+    })
+    const googleUser = await userInfoResponse.json()
+
+    if (!googleUser.email) throw new ApiError(StatusCodes.BAD_REQUEST, 'Cannot get email from Google account')
+
+    const { email, name, picture } = googleUser
+
+    // Tìm user theo email
+    let user = await userModel.findOneByEmail(email)
+
+    if (!user) {
+      // Tạo user mới nếu chưa tồn tại
+      const nameFromEmail = email.split('@')[0]
+      const newUser = {
+        email: email,
+        password: null,
+        username: nameFromEmail,
+        displayName: name || nameFromEmail,
+        avatar: picture || null,
+        isActive: true,
+        verifyToken: null,
+        loginType: 'google'
+      }
+      const createdUser = await userModel.createNew(newUser)
+      user = await userModel.findOneById(createdUser.insertedId)
+    } else if (!user.isActive) {
+      // Nếu user đã tồn tại nhưng chưa active (đăng ký email chưa verify), activate luôn
+      user = await userModel.update(user._id, { isActive: true, verifyToken: null })
+    }
+
+    return await _generateTokensForOAuthUser(user)
+  } catch (error) { throw error }
+}
+
+/**
+ * GitHub Login - Đổi authorization code lấy access_token, rồi lấy user info
+ */
+const githubLogin = async (code) => {
+  try {
+    // Chọn client ID/Secret phù hợp với môi trường
+    const clientId = env.BUILD_MODE === 'production' ? env.GITHUB_CLIENT_ID_PRODUCTION : env.GITHUB_CLIENT_ID_LOCAL
+    const clientSecret = env.BUILD_MODE === 'production' ? env.GITHUB_CLIENT_SECRET_PRODUCTION : env.GITHUB_CLIENT_SECRET_LOCAL
+
+    // Bước 1: Đổi authorization code lấy access_token
+    const tokenResponse = await fetch('https://github.com/login/oauth/access_token', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json'
+      },
+      body: JSON.stringify({
+        client_id: clientId,
+        client_secret: clientSecret,
+        code: code
+      })
+    })
+    const tokenData = await tokenResponse.json()
+
+    if (tokenData.error || !tokenData.access_token) {
+      throw new ApiError(StatusCodes.BAD_REQUEST, tokenData.error_description || 'Failed to get GitHub access token')
+    }
+
+    // Bước 2: Lấy user info từ GitHub
+    const userResponse = await fetch('https://api.github.com/user', {
+      headers: {
+        'Authorization': `Bearer ${tokenData.access_token}`,
+        'Accept': 'application/json'
+      }
+    })
+    const githubUser = await userResponse.json()
+
+    // Bước 3: Lấy email (có thể private nên cần gọi thêm API emails)
+    let email = githubUser.email
+    if (!email) {
+      const emailsResponse = await fetch('https://api.github.com/user/emails', {
+        headers: {
+          'Authorization': `Bearer ${tokenData.access_token}`,
+          'Accept': 'application/json'
+        }
+      })
+      const emails = await emailsResponse.json()
+      // Lấy email primary và đã verified
+      const primaryEmail = emails.find(e => e.primary && e.verified)
+      email = primaryEmail ? primaryEmail.email : (emails[0]?.email || null)
+    }
+
+    if (!email) throw new ApiError(StatusCodes.BAD_REQUEST, 'Cannot get email from GitHub account')
+
+    // Tìm user theo email
+    let user = await userModel.findOneByEmail(email)
+
+    if (!user) {
+      // Tạo user mới nếu chưa tồn tại
+      const nameFromEmail = email.split('@')[0]
+      const newUser = {
+        email: email,
+        password: null,
+        username: githubUser.login || nameFromEmail,
+        displayName: githubUser.name || githubUser.login || nameFromEmail,
+        avatar: githubUser.avatar_url || null,
+        isActive: true,
+        verifyToken: null,
+        loginType: 'github'
+      }
+      const createdUser = await userModel.createNew(newUser)
+      user = await userModel.findOneById(createdUser.insertedId)
+    } else if (!user.isActive) {
+      // Nếu user đã tồn tại nhưng chưa active, activate luôn
+      user = await userModel.update(user._id, { isActive: true, verifyToken: null })
+    }
+
+    return await _generateTokensForOAuthUser(user)
+  } catch (error) { throw error }
+}
+
 export const userService = {
   createNew,
   verifyAccount,
   login,
   refreshToken,
-  update
+  update,
+  googleLogin,
+  githubLogin
 }
