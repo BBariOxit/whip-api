@@ -126,10 +126,33 @@ const getBoards = async (userId, page, itemsPerPage, queryFilters) => {
   } catch (error) { throw error }
 }
 
+const deleteItem = async (boardId) => {
+  try {
+    const targetBoard = await boardModel.findOneById(boardId)
+    if (!targetBoard) {
+      throw new ApiError(StatusCodes.NOT_FOUND, 'Board not found!')
+    }
+
+    // Xoá board
+    await boardModel.deleteOneById(boardId)
+
+    // Xoá toàn bộ column thuộc board
+    await columnModel.deleteManyByBoardId(boardId)
+
+    // Xoá toàn bộ card thuộc board
+    await cardModel.deleteManyByBoardId(boardId)
+
+    return { deleteResult: 'Board and its Columns, Cards deleted successfully!' }
+  } catch (error) {
+    throw error
+  }
+}
+
 export const boardService = {
   createNew,
   getDetails,
   update,
   moveCardifferentColumn,
-  getBoards
+  getBoards,
+  deleteItem
 }
