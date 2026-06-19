@@ -17,6 +17,11 @@ const BOARD_COLLECTION_SCHEMA = Joi.object({
   slug: Joi.string().required().min(3).trim().strict(),
   description: Joi.string().required().min(3).max(256).trim().strict(),
   type: Joi.string().valid(BOARD_TYPES.PUBLIC, BOARD_TYPES.PRIVATE).required(),
+  background: Joi.object({
+    type: Joi.string().valid('gradient', 'solid', 'image').required(),
+    color1: Joi.string().required(),
+    color2: Joi.string().optional()
+  }).default({ type: 'gradient', color1: '#8a2387', color2: '#e94057' }),
 
   // admin của board
   ownerIds: Joi.array().items(
