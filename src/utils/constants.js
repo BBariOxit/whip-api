@@ -21,7 +21,7 @@ export const WEBSITE_DOMAIN = (env.BUILD_MODE === 'dev')
  : env.WEBSITE_DOMAIN_PRODUCTION
 
 export const DEFAULT_PAGE = 1
-export const DEFAULT_ITEMS_PER_PAGE = 12
+export const DEFAULT_ITEMS_PER_PAGE = 10
 
 export const INVITATION_TYPES = {
   BOARD_INVITATION: 'BOARD_INVITATION'
