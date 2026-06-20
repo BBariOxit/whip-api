@@ -76,11 +76,51 @@ const deleteItem = async (req, res, next) => {
   }
 }
 
+const bulkDeleteItems = async (req, res, next) => {
+  try {
+    const userId = req.jwtDecoded._id
+    const { boardIds } = req.body
+
+    const result = await boardService.bulkDeleteItems(userId, boardIds)
+    res.status(StatusCodes.OK).json(result)
+  } catch (error) {
+    next(error)
+  }
+}
+
+const getTemplates = async (req, res, next) => {
+  try {
+    const results = await boardService.getTemplates()
+    res.status(StatusCodes.OK).json(results)
+  } catch (error) {
+    next(error)
+  }
+}
+
+const cloneTemplate = async (req, res, next) => {
+  try {
+    const userId = req.jwtDecoded._id
+    const { templateBoardId } = req.body
+    
+    if (!templateBoardId) {
+      throw new ApiError(StatusCodes.BAD_REQUEST, 'templateBoardId is required')
+    }
+
+    const newBoard = await boardService.cloneTemplate(userId, templateBoardId)
+    res.status(StatusCodes.CREATED).json({ newBoardId: newBoard._id })
+  } catch (error) {
+    next(error)
+  }
+}
+
 export const boardController = {
   createNew,
   getDetails,
   update,
   moveCardifferentColumn,
   getBoards,
-  deleteItem
+  getTemplates,
+  cloneTemplate,
+  deleteItem,
+  bulkDeleteItems
 }

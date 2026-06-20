@@ -9,6 +9,15 @@ Router.route('/')
   .get(authMiddleware.isAuthorized, boardController.getBoards)
   .post(authMiddleware.isAuthorized, boardValidation.createNew, boardController.createNew)
 
+Router.route('/templates')
+  .get(authMiddleware.isAuthorized, boardController.getTemplates)
+
+Router.route('/templates/clone')
+  .post(authMiddleware.isAuthorized, boardController.cloneTemplate)
+
+Router.route('/bulk-delete')
+  .delete(authMiddleware.isAuthorized, boardController.bulkDeleteItems)
+
 Router.route('/:id')
   .get(authMiddleware.isAuthorized, boardController.getDetails)
   .put(authMiddleware.isAuthorized, boardValidation.update, boardController.update)

@@ -53,6 +53,7 @@ const BOARD_COLLECTION_SCHEMA = Joi.object({
     })
   ).default([]),
 
+  isTemplate: Joi.boolean().default(false),
   createAt: Joi.date().timestamp('javascript').default(Date.now),
   updateAt: Joi.date().timestamp('javascript').default(null),
   _destroy: Joi.boolean().default(false)
@@ -207,7 +208,9 @@ const getBoards = async (userId, page, itemsPerPage, queryFilters) => {
     const queryConditions = [
       // điều kiện 1: board chưa bị xóa
       { _destroy: false },
-      // Điều kiện 02: cái thằng userId đang thực hiện request này nó phải thuộc
+      // Điều kiện 02: không phải là template
+      { isTemplate: { $ne: true } },
+      // Điều kiện 03: cái thằng userId đang thực hiện request này nó phải thuộc
       // vào một trong 2 cái mảng ownerIds hoặc memberIds, sử dụng toán tử $all của mongodb
       { $or: [
         { ownerIds: { $all: [new ObjectId(userId)] } },
@@ -218,11 +221,6 @@ const getBoards = async (userId, page, itemsPerPage, queryFilters) => {
     // xử lý query filter cho từng trường hợp search board
     if (queryFilters) {
       Object.keys(queryFilters).forEach(key => {
-        // queryFilters[key] ví dụ queryFilters[title] nếu phía FE đẩy lên q[title]
-        // có phần biệt chữ hoa thường
-        // queryConditions.push({ [key]: { $regex: queryFilters[key] } })
-        
-        // ko phần biệt chữ hoa thường
         queryConditions.push({ [key]: { $regex: new RegExp(queryFilters[key], 'i') } })
       })
     }
@@ -230,20 +228,15 @@ const getBoards = async (userId, page, itemsPerPage, queryFilters) => {
     const query = await GET_DB().collection(BOARD_COLLECTION_NAME).aggregate(
       [
         { $match: { $and: queryConditions } },
-        // // sort title của board theo A-Z (mặc định sẽ bị chữ B hoa đứng trước chữ a thường (theo chuẩn bảng mã ASCII)
         { $sort: { title: 1 } },
-        // $facet để xử lý nhiều luông trong 1 query
         { $facet: { 
-          // luồng 1: quey boards
           'queryBoards': [
-            { $skip: pagingSkipValue(page, itemsPerPage) }, // bỏ qua số lượng bản ghi của những page trước đó
-            { $limit: itemsPerPage } // giới hạn tối đa số lượng bản ghi trên một page
+            { $skip: pagingSkipValue(page, itemsPerPage) },
+            { $limit: itemsPerPage }
           ],
-          // luồng 2: query đếm tổng số tất cả lượng bản ghi boards trong db trả về váo biến countedAllBoards
           'queryTotalBoards': [{ $count: 'countedAllBoards' }]  
         } }
       ],
-      // Khai báo thêm thuộc tính collation locale 'en' để fix vụ chữ B hoa và a thường ở trên
       { collation: { locale: 'en' } }
     ).toArray()
 
@@ -253,6 +246,18 @@ const getBoards = async (userId, page, itemsPerPage, queryFilters) => {
       boards: res.queryBoards || [],
       totalBoards: res.queryTotalBoards[0]?.countedAllBoards || 0
     }
+  } catch (error) {
+    throw new Error(error)
+  }
+}
+
+const getTemplates = async () => {
+  try {
+    const result = await GET_DB().collection(BOARD_COLLECTION_NAME).find({
+      isTemplate: true,
+      _destroy: false
+    }).sort({ title: 1 }).collation({ locale: 'en' }).toArray()
+    return result
   } catch (error) {
     throw new Error(error)
   }
@@ -339,6 +344,7 @@ export const boardModel = {
   update,
   pullColumnOrderIds,
   getBoards,
+  getTemplates,
   pushMemberIds,
   pushCustomField,
   updateCustomField,

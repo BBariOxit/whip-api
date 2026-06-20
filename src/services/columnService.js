@@ -61,8 +61,28 @@ const deleteItem = async (columnId) => {
   }
 }
 
+const clearAllCards = async (columnId) => {
+  try {
+    const targetColumn = await columnModel.findOneById(columnId)
+    if (!targetColumn) {
+      throw new ApiError(StatusCodes.NOT_FOUND, 'column not found!')
+    }
+
+    // xóa toàn bộ card thuộc column trên
+    await cardModel.deleteManyByColumnId(columnId)
+
+    // làm rỗng cardOrderIds
+    await columnModel.emptyCardOrderIds(columnId)
+
+    return { deleteResult: 'All cards in column deleted successfully!' }
+  } catch (error) {
+    throw error
+  }
+}
+
 export const columnService = {
   createNew,
   update,
-  deleteItem
+  deleteItem,
+  clearAllCards
 }

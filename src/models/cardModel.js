@@ -135,6 +135,17 @@ const deleteManyByColumnId = async (columnId) => {
   }
 }
 
+const deleteOneById = async (cardId) => {
+  try {
+    const result = await GET_DB().collection(CARD_COLLECTION_NAME).deleteOne({
+      _id: new ObjectId(cardId)
+    })
+    return result
+  } catch (error) {
+    throw new Error(error)
+  }
+}
+
 const incrementTotalComments = async (cardId) => {
   try {
     const result = await GET_DB().collection(CARD_COLLECTION_NAME).findOneAndUpdate(
@@ -270,5 +281,6 @@ export const cardModel = {
   pullLabelFromCards,
   pushNewAttachment,
   pullAttachment,
-  pullCustomFieldValues
+  pullCustomFieldValues,
+  deleteOneById
 }

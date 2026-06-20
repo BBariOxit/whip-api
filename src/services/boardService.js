@@ -3,10 +3,13 @@ import { slugify } from '~/utils/formatter'
 import { boardModel } from '~/models/boardModel'
 import { columnModel } from '~/models/columnModel'
 import { cardModel } from '~/models/cardModel'
+import { labelModel } from '~/models/labelModel'
+import { GET_DB } from '~/config/mongodb'
 import ApiError from '~/utils/ApiError'
 import { StatusCodes } from 'http-status-codes'
 import { OBJECT_ID_RULE } from '~/utils/validators'
 import { DEFAULT_PAGE, DEFAULT_ITEMS_PER_PAGE } from '~/utils/constants'
+import { ObjectId } from 'mongodb'
 
 const createNew = async (userId, reqBody) => {
   try {
@@ -148,11 +151,206 @@ const deleteItem = async (boardId) => {
   }
 }
 
+const bulkDeleteItems = async (userId, boardIds) => {
+  try {
+    if (!boardIds || !Array.isArray(boardIds) || boardIds.length === 0) {
+      throw new ApiError(StatusCodes.BAD_REQUEST, 'Board IDs array is empty')
+    }
+
+    const objectIds = boardIds.map(id => new ObjectId(id))
+    const db = GET_DB()
+
+    // Find boards that actually belong to the user and match the IDs
+    const boardsToDelete = await db.collection(boardModel.BOARD_COLLECTION_NAME).find({
+      _id: { $in: objectIds },
+      ownerIds: { $all: [new ObjectId(userId)] }
+    }).toArray()
+
+    const validBoardIds = boardsToDelete.map(b => b._id)
+
+    if (validBoardIds.length > 0) {
+      // Delete boards
+      await db.collection(boardModel.BOARD_COLLECTION_NAME).deleteMany({
+        _id: { $in: validBoardIds }
+      })
+
+      // Delete columns
+      await db.collection(columnModel.COLUMN_COLLECTION_NAME).deleteMany({
+        boardId: { $in: validBoardIds }
+      })
+
+      // Delete cards
+      await db.collection(cardModel.CARD_COLLECTION_NAME).deleteMany({
+        boardId: { $in: validBoardIds }
+      })
+
+      // Delete labels
+      await db.collection(labelModel.LABEL_COLLECTION_NAME).deleteMany({
+        boardId: { $in: validBoardIds }
+      })
+    }
+
+    return { deleteResult: `Successfully deleted ${validBoardIds.length} boards!` }
+  } catch (error) {
+    throw error
+  }
+}
+
+const getTemplates = async () => {
+  try {
+    const results = await boardModel.getTemplates()
+    return results
+  } catch (error) { throw error }
+}
+
+const cloneTemplate = async (userId, templateBoardId) => {
+  try {
+    // 1. Get template board details (includes its columns and cards)
+    // using user ID null because template doesn't belong to any user, but getDetails checks owners/members. 
+    // Wait, getDetails checks owners/members! So getDetails will fail for a template board with a normal userId.
+    // Let's create a specific fetch or modify getDetails. Actually, template boards have empty ownerIds.
+    // We might need to just find it using findOneById, then fetch columns.
+    const templateBoard = await boardModel.findOneById(templateBoardId)
+    if (!templateBoard || !templateBoard.isTemplate) {
+      throw new ApiError(StatusCodes.NOT_FOUND, 'Template not found!')
+    }
+
+    // Fetch columns of the template
+    const templateColumns = await GET_DB().collection(columnModel.COLUMN_COLLECTION_NAME).find({
+      boardId: templateBoard._id
+    }).toArray()
+
+    // Fetch cards of the template
+    const templateCards = await GET_DB().collection(cardModel.CARD_COLLECTION_NAME).find({
+      boardId: templateBoard._id
+    }).toArray()
+
+    // Fetch labels of the template
+    const templateLabels = await GET_DB().collection(labelModel.LABEL_COLLECTION_NAME).find({
+      boardId: templateBoard._id
+    }).toArray()
+
+    // 2. Create new board based on template
+    const newTitle = `${templateBoard.title} (Bản sao)`
+    const newBoardData = {
+      title: newTitle,
+      slug: slugify(newTitle),
+      description: templateBoard.description,
+      type: 'private', // User's cloned board might be private by default
+      background: templateBoard.background,
+      isTemplate: false
+    }
+
+    const createdBoard = await boardModel.createNew(userId, newBoardData)
+    const newBoardId = createdBoard.insertedId
+
+    // 3. Clone columns
+    const columnIdMapping = {}
+    const newColumnOrderIds = []
+
+    for (const col of templateColumns) {
+      const newColData = {
+        boardId: newBoardId,
+        title: col.title,
+        cardOrderIds: [],
+        createdAt: Date.now(),
+        updatedAt: null,
+        _destroy: false
+      }
+      const createdCol = await GET_DB().collection(columnModel.COLUMN_COLLECTION_NAME).insertOne(newColData)
+      columnIdMapping[col._id.toString()] = createdCol.insertedId
+      newColumnOrderIds.push(createdCol.insertedId)
+    }
+
+    // Clone labels
+    const labelIdMapping = {}
+    const newLabelsData = []
+    for (const label of templateLabels) {
+      const newLabelId = new ObjectId()
+      labelIdMapping[label._id.toString()] = newLabelId
+      const newLabel = {
+        ...label,
+        _id: newLabelId,
+        boardId: newBoardId,
+        createdAt: Date.now()
+      }
+      newLabelsData.push(newLabel)
+    }
+    
+    if (newLabelsData.length > 0) {
+      await GET_DB().collection(labelModel.LABEL_COLLECTION_NAME).insertMany(newLabelsData)
+    }
+
+    // Clone cards
+    const cardIdMapping = {}
+    const newCardsData = []
+    for (const card of templateCards) {
+      const newColId = columnIdMapping[card.columnId.toString()]
+      if (newColId) {
+        const newCardId = new ObjectId()
+        cardIdMapping[card._id.toString()] = newCardId
+
+        // Map labelIds
+        const mappedLabelIds = (card.labelIds || []).map(oldLabelId => labelIdMapping[oldLabelId.toString()]).filter(id => id)
+
+        const newCard = {
+          ...card,
+          _id: newCardId,
+          boardId: newBoardId,
+          columnId: newColId,
+          labelIds: mappedLabelIds,
+          memberIds: [], // Reset members
+          createdAt: Date.now(),
+          updatedAt: null
+        }
+        newCardsData.push(newCard)
+      }
+    }
+
+    if (newCardsData.length > 0) {
+      await GET_DB().collection(cardModel.CARD_COLLECTION_NAME).insertMany(newCardsData)
+    }
+
+    // 4. Update new board's columnOrderIds and columns' cardOrderIds
+    if (newColumnOrderIds.length > 0) {
+      const orderedNewColIds = templateBoard.columnOrderIds
+        .map(oldId => columnIdMapping[oldId.toString()])
+        .filter(id => id)
+
+      await boardModel.update(newBoardId, {
+        columnOrderIds: orderedNewColIds
+      })
+
+      // Update cardOrderIds for new columns
+      for (const col of templateColumns) {
+        const newColId = columnIdMapping[col._id.toString()]
+        if (newColId && col.cardOrderIds && col.cardOrderIds.length > 0) {
+          // Map old card IDs to new card IDs
+          const newCardOrderIds = col.cardOrderIds
+            .map(oldCardId => cardIdMapping[oldCardId.toString()])
+            .filter(id => id)
+
+          await columnModel.update(newColId, {
+            cardOrderIds: newCardOrderIds
+          })
+        }
+      }
+    }
+
+    return await boardModel.findOneById(newBoardId)
+  } catch (error) {
+    throw error
+  }
+}
+
 export const boardService = {
   createNew,
   getDetails,
   update,
   moveCardifferentColumn,
   getBoards,
-  deleteItem
+  getTemplates,
+  cloneTemplate,
+  deleteItem,
+  bulkDeleteItems
 }
