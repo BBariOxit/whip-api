@@ -237,9 +237,41 @@ const deleteAttachment = async (cardId, publicId, userInfo) => {
   } catch (error) { throw error }
 }
 
+const deleteItem = async (cardId, userInfo) => {
+  try {
+    const targetCard = await cardModel.findOneById(cardId)
+    if (!targetCard) {
+      throw new Error('Card not found!')
+    }
+
+    // Xóa card khỏi db
+    await cardModel.deleteOneById(cardId)
+
+    // Xóa cardId khỏi mảng cardOrderIds của Column chứa nó
+    await columnModel.pullCardOrderIds(targetCard)
+
+    // Log activity
+    const fullUser = await userModel.findOneById(userInfo._id)
+    await logActivity({
+      cardId: cardId, // Có thể log ở cấp độ board nếu cardId đã mất
+      userId: userInfo._id,
+      userEmail: userInfo.email,
+      userAvatar: userInfo.avatar || null,
+      userDisplayName: fullUser?.displayName || fullUser?.username || userInfo.email,
+      actionType: 'DELETE_CARD',
+      content: `đã xóa một thẻ "${targetCard.title}"`
+    })
+
+    return { deleteResult: 'Card deleted successfully!' }
+  } catch (error) {
+    throw error
+  }
+}
+
 export const cardService = {
   createNew,
   update,
   uploadAttachment,
-  deleteAttachment
+  deleteAttachment,
+  deleteItem
 }

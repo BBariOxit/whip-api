@@ -33,8 +33,20 @@ const deleteItem = async (req, res, next) => {
   }
 }
 
+const clearAllCards = async (req, res, next) => {
+  try {
+    const columnId = req.params.id
+    const result = await columnService.clearAllCards(columnId)
+
+    res.status(StatusCodes.OK).json(result)
+  } catch (error) {
+    next(error)
+  }
+}
+
 export const columnController = {
   createNew,
   update,
-  deleteItem
+  deleteItem,
+  clearAllCards
 }

@@ -15,6 +15,7 @@ Router.route('/:id')
     multerUploadMiddleware.upload.single('cardCover'),
     cardValidation.update,
     cardController.update)
+  .delete(authMiddleware.isAuthorized, cardController.deleteItem)
 
 // Attachment APIs: Upload và Xóa file đính kèm
 Router.route('/:id/attachments')

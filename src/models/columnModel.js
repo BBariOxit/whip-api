@@ -52,12 +52,39 @@ const findOneById = async (columnId) => {
   }
 }
 
-// cập nhập push 1 giá trị card id vào cuối mảng cardOrderIds
 const pushCardOrderIds = async (card) => {
   try {
     const result = await GET_DB().collection(COLUMN_COLLECTION_NAME).findOneAndUpdate(
       { _id: new ObjectId(card.columnId) },
       { $push: { cardOrderIds: new ObjectId(card._id) } },
+      { returnDocument: 'after' }
+    )
+    return result
+  } catch (error) {
+    throw new Error(error)
+  }
+}
+
+// pull 1 giá trị card id ra khỏi mảng cardOrderIds
+const pullCardOrderIds = async (card) => {
+  try {
+    const result = await GET_DB().collection(COLUMN_COLLECTION_NAME).findOneAndUpdate(
+      { _id: new ObjectId(card.columnId) },
+      { $pull: { cardOrderIds: new ObjectId(card._id) } },
+      { returnDocument: 'after' }
+    )
+    return result
+  } catch (error) {
+    throw new Error(error)
+  }
+}
+
+// làm rỗng mảng cardOrderIds
+const emptyCardOrderIds = async (columnId) => {
+  try {
+    const result = await GET_DB().collection(COLUMN_COLLECTION_NAME).findOneAndUpdate(
+      { _id: new ObjectId(columnId) },
+      { $set: { cardOrderIds: [] } },
       { returnDocument: 'after' }
     )
     return result
@@ -121,5 +148,7 @@ export const columnModel = {
   pushCardOrderIds,
   update,
   deleteOneById,
-  deleteManyByBoardId
+  deleteManyByBoardId,
+  pullCardOrderIds,
+  emptyCardOrderIds
 }
