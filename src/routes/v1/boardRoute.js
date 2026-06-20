@@ -15,6 +15,9 @@ Router.route('/templates')
 Router.route('/templates/clone')
   .post(authMiddleware.isAuthorized, boardController.cloneTemplate)
 
+Router.route('/bulk-delete')
+  .delete(authMiddleware.isAuthorized, boardController.bulkDeleteItems)
+
 Router.route('/:id')
   .get(authMiddleware.isAuthorized, boardController.getDetails)
   .put(authMiddleware.isAuthorized, boardValidation.update, boardController.update)

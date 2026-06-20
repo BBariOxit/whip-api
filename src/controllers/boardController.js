@@ -76,6 +76,18 @@ const deleteItem = async (req, res, next) => {
   }
 }
 
+const bulkDeleteItems = async (req, res, next) => {
+  try {
+    const userId = req.jwtDecoded._id
+    const { boardIds } = req.body
+
+    const result = await boardService.bulkDeleteItems(userId, boardIds)
+    res.status(StatusCodes.OK).json(result)
+  } catch (error) {
+    next(error)
+  }
+}
+
 const getTemplates = async (req, res, next) => {
   try {
     const results = await boardService.getTemplates()
@@ -109,5 +121,6 @@ export const boardController = {
   getBoards,
   getTemplates,
   cloneTemplate,
-  deleteItem
+  deleteItem,
+  bulkDeleteItems
 }

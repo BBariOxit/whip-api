@@ -151,6 +151,51 @@ const deleteItem = async (boardId) => {
   }
 }
 
+const bulkDeleteItems = async (userId, boardIds) => {
+  try {
+    if (!boardIds || !Array.isArray(boardIds) || boardIds.length === 0) {
+      throw new ApiError(StatusCodes.BAD_REQUEST, 'Board IDs array is empty')
+    }
+
+    const objectIds = boardIds.map(id => new ObjectId(id))
+    const db = GET_DB()
+
+    // Find boards that actually belong to the user and match the IDs
+    const boardsToDelete = await db.collection(boardModel.BOARD_COLLECTION_NAME).find({
+      _id: { $in: objectIds },
+      ownerIds: { $all: [new ObjectId(userId)] }
+    }).toArray()
+
+    const validBoardIds = boardsToDelete.map(b => b._id)
+
+    if (validBoardIds.length > 0) {
+      // Delete boards
+      await db.collection(boardModel.BOARD_COLLECTION_NAME).deleteMany({
+        _id: { $in: validBoardIds }
+      })
+
+      // Delete columns
+      await db.collection(columnModel.COLUMN_COLLECTION_NAME).deleteMany({
+        boardId: { $in: validBoardIds }
+      })
+
+      // Delete cards
+      await db.collection(cardModel.CARD_COLLECTION_NAME).deleteMany({
+        boardId: { $in: validBoardIds }
+      })
+
+      // Delete labels
+      await db.collection(labelModel.LABEL_COLLECTION_NAME).deleteMany({
+        boardId: { $in: validBoardIds }
+      })
+    }
+
+    return { deleteResult: `Successfully deleted ${validBoardIds.length} boards!` }
+  } catch (error) {
+    throw error
+  }
+}
+
 const getTemplates = async () => {
   try {
     const results = await boardModel.getTemplates()
@@ -306,5 +351,6 @@ export const boardService = {
   getBoards,
   getTemplates,
   cloneTemplate,
-  deleteItem
+  deleteItem,
+  bulkDeleteItems
 }
