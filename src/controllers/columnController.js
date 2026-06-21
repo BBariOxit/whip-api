@@ -44,9 +44,26 @@ const clearAllCards = async (req, res, next) => {
   }
 }
 
+const updateAllCardsLayout = async (req, res, next) => {
+  try {
+    const columnId = req.params.id
+    const { newLayout } = req.body
+
+    if (!['compact', 'standard', 'detailed'].includes(newLayout)) {
+      return res.status(StatusCodes.BAD_REQUEST).json({ error: 'Invalid layout code' })
+    }
+
+    const result = await columnService.updateAllCardsLayout(columnId, newLayout)
+    res.status(StatusCodes.OK).json(result)
+  } catch (error) {
+    next(error)
+  }
+}
+
 export const columnController = {
   createNew,
   update,
   deleteItem,
-  clearAllCards
+  clearAllCards,
+  updateAllCardsLayout
 }

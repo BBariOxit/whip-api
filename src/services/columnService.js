@@ -80,9 +80,27 @@ const clearAllCards = async (columnId) => {
   }
 }
 
+const updateAllCardsLayout = async (columnId, newLayout) => {
+  try {
+    const targetColumn = await columnModel.findOneById(columnId)
+    if (!targetColumn) {
+      throw new ApiError(StatusCodes.NOT_FOUND, 'column not found!')
+    }
+
+    const result = await cardModel.updateManyCardsLayoutByColumnId(columnId, newLayout)
+    return { 
+      updatedCount: result.modifiedCount,
+      message: `Successfully updated layout for ${result.modifiedCount} cards!` 
+    }
+  } catch (error) {
+    throw error
+  }
+}
+
 export const columnService = {
   createNew,
   update,
   deleteItem,
-  clearAllCards
+  clearAllCards,
+  updateAllCardsLayout
 }

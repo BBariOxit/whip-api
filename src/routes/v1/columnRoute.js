@@ -15,4 +15,7 @@ Router.route('/:id')
 Router.route('/clear-cards/:id')
   .delete(authMiddleware.isAuthorized, columnController.clearAllCards)
 
+Router.route('/:id/cards-layout')
+  .put(authMiddleware.isAuthorized, columnController.updateAllCardsLayout)
+
 export const columnRouter = Router
