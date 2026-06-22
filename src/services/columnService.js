@@ -107,9 +107,6 @@ const archiveColumn = async (columnId) => {
     // Archive column (soft delete)
     await columnModel.archiveColumn(columnId)
 
-    // Soft delete toàn bộ card thuộc column (set _destroy: true thay vì xóa vĩnh viễn)
-    await cardModel.archiveManyByColumnId(columnId)
-
     // Xóa columnId khỏi mảng columnOrderIds của Board chứa nó
     await boardModel.pullColumnOrderIds(targetColumn)
 
