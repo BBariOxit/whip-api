@@ -268,10 +268,42 @@ const deleteItem = async (cardId, userInfo) => {
   }
 }
 
+const archiveCard = async (cardId, userInfo) => {
+  try {
+    const targetCard = await cardModel.findOneById(cardId)
+    if (!targetCard) {
+      throw new Error('Card not found!')
+    }
+
+    // Archive card (soft delete)
+    await cardModel.archiveCard(cardId)
+
+    // Xóa cardId khỏi mảng cardOrderIds của Column chứa nó
+    await columnModel.pullCardOrderIds(targetCard)
+
+    // Log activity (bỏ qua log khi archive)
+    // const fullUser = await userModel.findOneById(userInfo._id)
+    // await logActivity({
+    //   cardId: cardId,
+    //   userId: userInfo._id,
+    //   userEmail: userInfo.email,
+    //   userAvatar: userInfo.avatar || null,
+    //   userDisplayName: fullUser?.displayName || fullUser?.username || userInfo.email,
+    //   actionType: ACTIVITY_ACTION_TYPES.ARCHIVE_CARD,
+    //   content: `đã lưu trữ thẻ "${targetCard.title}"`
+    // })
+
+    return { archiveResult: 'Card archived successfully!' }
+  } catch (error) {
+    throw error
+  }
+}
+
 export const cardService = {
   createNew,
   update,
   uploadAttachment,
   deleteAttachment,
-  deleteItem
+  deleteItem,
+  archiveCard
 }

@@ -269,6 +269,19 @@ const pullCustomFieldValues = async (boardId, fieldId) => {
   }
 }
 
+const archiveCard = async (cardId) => {
+  try {
+    const result = await GET_DB().collection(CARD_COLLECTION_NAME).findOneAndUpdate(
+      { _id: new ObjectId(cardId) },
+      { $set: { _destroy: true, updatedAt: Date.now() } },
+      { returnDocument: 'after' }
+    )
+    return result
+  } catch (error) {
+    throw new Error(error)
+  }
+}
+
 const deleteManyByBoardId = async (boardId) => {
   try {
     const result = await GET_DB().collection(CARD_COLLECTION_NAME).deleteMany({
@@ -296,5 +309,6 @@ export const cardModel = {
   pullAttachment,
   pullCustomFieldValues,
   deleteOneById,
-  updateManyCardsLayoutByColumnId
+  updateManyCardsLayoutByColumnId,
+  archiveCard
 }

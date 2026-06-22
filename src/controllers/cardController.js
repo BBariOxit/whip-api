@@ -55,10 +55,21 @@ const deleteItem = async (req, res, next) => {
   } catch (error) { next(error) }
 }
 
+const archiveCard = async (req, res, next) => {
+  try {
+    const cardId = req.params.id
+    const userInfo = req.jwtDecoded
+    const result = await cardService.archiveCard(cardId, userInfo)
+
+    res.status(StatusCodes.OK).json(result)
+  } catch (error) { next(error) }
+}
+
 export const cardController = {
   createNew,
   update,
   uploadAttachment,
   deleteAttachment,
-  deleteItem
+  deleteItem,
+  archiveCard
 }
