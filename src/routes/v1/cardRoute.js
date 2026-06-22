@@ -17,6 +17,13 @@ Router.route('/:id')
     cardController.update)
   .delete(authMiddleware.isAuthorized, cardController.deleteItem)
 
+// Archive Card API
+Router.route('/:id/archive')
+  .put(authMiddleware.isAuthorized, cardController.archiveCard)
+
+Router.route('/:id/restore')
+  .put(authMiddleware.isAuthorized, cardController.restoreCard)
+
 // Attachment APIs: Upload và Xóa file đính kèm
 Router.route('/:id/attachments')
   .post(

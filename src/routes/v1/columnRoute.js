@@ -18,4 +18,11 @@ Router.route('/clear-cards/:id')
 Router.route('/:id/cards-layout')
   .put(authMiddleware.isAuthorized, columnController.updateAllCardsLayout)
 
+// Archive Column API
+Router.route('/:id/archive')
+  .put(authMiddleware.isAuthorized, columnController.archiveColumn)
+
+Router.route('/:id/restore')
+  .put(authMiddleware.isAuthorized, columnController.restoreColumn)
+
 export const columnRouter = Router

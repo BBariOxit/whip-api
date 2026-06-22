@@ -128,7 +128,8 @@ const update = async (cardId, updateData) => {
 const deleteManyByColumnId = async (columnId) => {
   try {
     const result = await GET_DB().collection(CARD_COLLECTION_NAME).deleteMany({
-      columnId: new ObjectId(columnId)
+      columnId: new ObjectId(columnId),
+      _destroy: false
     })
     return result
   } catch (error) {
@@ -269,11 +270,78 @@ const pullCustomFieldValues = async (boardId, fieldId) => {
   }
 }
 
+const archiveCard = async (cardId) => {
+  try {
+    const result = await GET_DB().collection(CARD_COLLECTION_NAME).findOneAndUpdate(
+      { _id: new ObjectId(cardId) },
+      { $set: { _destroy: true, updatedAt: Date.now() } },
+      { returnDocument: 'after' }
+    )
+    return result
+  } catch (error) {
+    throw new Error(error)
+  }
+}
+
+const archiveManyByColumnId = async (columnId) => {
+  try {
+    const result = await GET_DB().collection(CARD_COLLECTION_NAME).updateMany(
+      { columnId: new ObjectId(columnId) },
+      { $set: { _destroy: true, updatedAt: Date.now() } }
+    )
+    return result
+  } catch (error) {
+    throw new Error(error)
+  }
+}
+
 const deleteManyByBoardId = async (boardId) => {
   try {
     const result = await GET_DB().collection(CARD_COLLECTION_NAME).deleteMany({
       boardId: new ObjectId(boardId)
     })
+    return result
+  } catch (error) {
+    throw new Error(error)
+  }
+}
+
+const getArchivedByBoardId = async (boardId) => {
+  try {
+    const result = await GET_DB().collection(CARD_COLLECTION_NAME).find({
+      boardId: new ObjectId(boardId),
+      _destroy: true
+    }).toArray()
+    return result
+  } catch (error) {
+    throw new Error(error)
+  }
+}
+
+const restoreCard = async (cardId, newColumnId = null) => {
+  try {
+    const updateData = { _destroy: false, updatedAt: Date.now() }
+    if (newColumnId) {
+      updateData.columnId = new ObjectId(newColumnId)
+    }
+
+    const result = await GET_DB().collection(CARD_COLLECTION_NAME).findOneAndUpdate(
+      { _id: new ObjectId(cardId) },
+      { $set: updateData },
+      { returnDocument: 'after' }
+    )
+    return result
+  } catch (error) {
+    throw new Error(error)
+  }
+}
+
+const restoreManyByColumnId = async (columnId) => {
+  try {
+    const result = await GET_DB().collection(CARD_COLLECTION_NAME).updateMany(
+      { columnId: new ObjectId(columnId) },
+      { $set: { _destroy: false, updatedAt: Date.now() } }
+    )
     return result
   } catch (error) {
     throw new Error(error)
@@ -296,5 +364,10 @@ export const cardModel = {
   pullAttachment,
   pullCustomFieldValues,
   deleteOneById,
-  updateManyCardsLayoutByColumnId
+  updateManyCardsLayoutByColumnId,
+  archiveCard,
+  archiveManyByColumnId,
+  getArchivedByBoardId,
+  restoreCard,
+  restoreManyByColumnId
 }

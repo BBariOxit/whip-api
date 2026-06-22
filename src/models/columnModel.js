@@ -140,6 +140,44 @@ const deleteManyByBoardId = async (boardId) => {
   }
 }
 
+const archiveColumn = async (columnId) => {
+  try {
+    const result = await GET_DB().collection(COLUMN_COLLECTION_NAME).findOneAndUpdate(
+      { _id: new ObjectId(columnId) },
+      { $set: { _destroy: true, updatedAt: Date.now() } },
+      { returnDocument: 'after' }
+    )
+    return result
+  } catch (error) {
+    throw new Error(error)
+  }
+}
+
+const getArchivedByBoardId = async (boardId) => {
+  try {
+    const result = await GET_DB().collection(COLUMN_COLLECTION_NAME).find({
+      boardId: new ObjectId(boardId),
+      _destroy: true
+    }).toArray()
+    return result
+  } catch (error) {
+    throw new Error(error)
+  }
+}
+
+const restoreColumn = async (columnId) => {
+  try {
+    const result = await GET_DB().collection(COLUMN_COLLECTION_NAME).findOneAndUpdate(
+      { _id: new ObjectId(columnId) },
+      { $set: { _destroy: false, updatedAt: Date.now() } },
+      { returnDocument: 'after' }
+    )
+    return result
+  } catch (error) {
+    throw new Error(error)
+  }
+}
+
 export const columnModel = {
   COLUMN_COLLECTION_NAME,
   COLUMN_COLLECTION_SCHEMA,
@@ -150,5 +188,8 @@ export const columnModel = {
   deleteOneById,
   deleteManyByBoardId,
   pullCardOrderIds,
-  emptyCardOrderIds
+  emptyCardOrderIds,
+  archiveColumn,
+  getArchivedByBoardId,
+  restoreColumn
 }

@@ -112,13 +112,15 @@ const getDetails = async (userId, boardId) => {
         from: columnModel.COLUMN_COLLECTION_NAME,
         localField: '_id',
         foreignField: 'boardId',
-        as: 'columns'
+        as: 'columns',
+        pipeline: [{ $match: { _destroy: false } }]
       } },
       { $lookup: {
         from: cardModel.CARD_COLLECTION_NAME,
         localField: '_id',
         foreignField: 'boardId',
-        as: 'cards'
+        as: 'cards',
+        pipeline: [{ $match: { _destroy: false } }]
       } },
       { $lookup: {
         from: userModel.USER_COLLECTION_NAME,

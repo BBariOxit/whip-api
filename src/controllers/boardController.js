@@ -113,6 +113,16 @@ const cloneTemplate = async (req, res, next) => {
   }
 }
 
+const getArchivedItems = async (req, res, next) => {
+  try {
+    const boardId = req.params.id
+    const archivedItems = await boardService.getArchivedItems(boardId)
+    res.status(StatusCodes.OK).json(archivedItems)
+  } catch (error) {
+    next(error)
+  }
+}
+
 export const boardController = {
   createNew,
   getDetails,
@@ -122,5 +132,6 @@ export const boardController = {
   getTemplates,
   cloneTemplate,
   deleteItem,
-  bulkDeleteItems
+  bulkDeleteItems,
+  getArchivedItems
 }

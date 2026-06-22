@@ -55,10 +55,32 @@ const deleteItem = async (req, res, next) => {
   } catch (error) { next(error) }
 }
 
+const archiveCard = async (req, res, next) => {
+  try {
+    const cardId = req.params.id
+    const userInfo = req.jwtDecoded
+    const result = await cardService.archiveCard(cardId, userInfo)
+
+    res.status(StatusCodes.OK).json(result)
+  } catch (error) { next(error) }
+}
+
+const restoreCard = async (req, res, next) => {
+  try {
+    const cardId = req.params.id
+    const { newColumnId } = req.body
+    const result = await cardService.restoreCard(cardId, newColumnId)
+
+    res.status(StatusCodes.OK).json({ message: 'Card restored successfully!', card: result })
+  } catch (error) { next(error) }
+}
+
 export const cardController = {
   createNew,
   update,
   uploadAttachment,
   deleteAttachment,
-  deleteItem
+  deleteItem,
+  archiveCard,
+  restoreCard
 }

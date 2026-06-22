@@ -97,10 +97,55 @@ const updateAllCardsLayout = async (columnId, newLayout) => {
   }
 }
 
+const archiveColumn = async (columnId) => {
+  try {
+    const targetColumn = await columnModel.findOneById(columnId)
+    if (!targetColumn) {
+      throw new ApiError(StatusCodes.NOT_FOUND, 'Column not found!')
+    }
+
+    // Archive column (soft delete)
+    await columnModel.archiveColumn(columnId)
+
+    // Xóa columnId khỏi mảng columnOrderIds của Board chứa nó
+    await boardModel.pullColumnOrderIds(targetColumn)
+
+    return { archiveResult: 'Column and its cards archived successfully!' }
+  } catch (error) {
+    throw error
+  }
+}
+
+const restoreColumn = async (columnId) => {
+  try {
+    const targetColumn = await columnModel.findOneById(columnId)
+    if (!targetColumn) {
+      throw new ApiError(StatusCodes.NOT_FOUND, 'Column not found!')
+    }
+
+    // Restore column (unset _destroy)
+    const restoredColumn = await columnModel.restoreColumn(columnId)
+
+    // Khôi phục column (unset _destroy)
+    // Các cards bên trong vốn dĩ không bị đổi _destroy khi archive column, 
+    // nên không cần (và không được) tự động updateMany _destroy: false cho chúng.
+    // Việc này giúp giữ nguyên trạng thái của những card đã bị archive thủ công từ trước.
+
+    // Thêm lại columnId vào mảng columnOrderIds của Board chứa nó
+    await boardModel.pushColumnOrderIds(targetColumn)
+
+    return restoredColumn
+  } catch (error) {
+    throw error
+  }
+}
+
 export const columnService = {
   createNew,
   update,
   deleteItem,
   clearAllCards,
-  updateAllCardsLayout
+  updateAllCardsLayout,
+  archiveColumn,
+  restoreColumn
 }
