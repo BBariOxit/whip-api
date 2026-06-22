@@ -119,11 +119,38 @@ const archiveColumn = async (columnId) => {
   }
 }
 
+const restoreColumn = async (columnId) => {
+  try {
+    const targetColumn = await columnModel.findOneById(columnId)
+    if (!targetColumn) {
+      throw new ApiError(StatusCodes.NOT_FOUND, 'Column not found!')
+    }
+
+    // Restore column (unset _destroy)
+    const restoredColumn = await columnModel.restoreColumn(columnId)
+
+    // Khôi phục toàn bộ card thuộc column (unset _destroy)
+    // Wait, we need to implement restoreManyByColumnId in cardModel, or just use updateMany.
+    // Let's implement restoreManyByColumnId in cardModel or updateMany here.
+    // Actually, I forgot to add restoreManyByColumnId to cardModel. I will use updateMany via cardModel or add it.
+    // Let's call cardModel.restoreManyByColumnId and I will add it to cardModel next.
+    await cardModel.restoreManyByColumnId(columnId)
+
+    // Thêm lại columnId vào mảng columnOrderIds của Board chứa nó
+    await boardModel.pushColumnOrderIds(targetColumn)
+
+    return restoredColumn
+  } catch (error) {
+    throw error
+  }
+}
+
 export const columnService = {
   createNew,
   update,
   deleteItem,
   clearAllCards,
   updateAllCardsLayout,
-  archiveColumn
+  archiveColumn,
+  restoreColumn
 }

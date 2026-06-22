@@ -21,6 +21,9 @@ Router.route('/:id')
 Router.route('/:id/archive')
   .put(authMiddleware.isAuthorized, cardController.archiveCard)
 
+Router.route('/:id/restore')
+  .put(authMiddleware.isAuthorized, cardController.restoreCard)
+
 // Attachment APIs: Upload và Xóa file đính kèm
 Router.route('/:id/attachments')
   .post(

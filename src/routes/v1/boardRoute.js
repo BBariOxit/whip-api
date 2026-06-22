@@ -18,6 +18,9 @@ Router.route('/templates/clone')
 Router.route('/bulk-delete')
   .delete(authMiddleware.isAuthorized, boardController.bulkDeleteItems)
 
+Router.route('/:id/archived-items')
+  .get(authMiddleware.isAuthorized, boardController.getArchivedItems)
+
 Router.route('/:id')
   .get(authMiddleware.isAuthorized, boardController.getDetails)
   .put(authMiddleware.isAuthorized, boardValidation.update, boardController.update)

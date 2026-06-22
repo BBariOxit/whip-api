@@ -299,11 +299,31 @@ const archiveCard = async (cardId, userInfo) => {
   }
 }
 
+const restoreCard = async (cardId) => {
+  try {
+    const targetCard = await cardModel.findOneById(cardId)
+    if (!targetCard) {
+      throw new Error('Card not found!')
+    }
+
+    // Restore card (unset _destroy)
+    const restoredCard = await cardModel.restoreCard(cardId)
+
+    // Thêm lại cardId vào mảng cardOrderIds của Column chứa nó
+    await columnModel.pushCardOrderIds(targetCard)
+
+    return restoredCard
+  } catch (error) {
+    throw error
+  }
+}
+
 export const cardService = {
   createNew,
   update,
   uploadAttachment,
   deleteAttachment,
   deleteItem,
-  archiveCard
+  archiveCard,
+  restoreCard
 }

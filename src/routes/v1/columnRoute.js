@@ -22,4 +22,7 @@ Router.route('/:id/cards-layout')
 Router.route('/:id/archive')
   .put(authMiddleware.isAuthorized, columnController.archiveColumn)
 
+Router.route('/:id/restore')
+  .put(authMiddleware.isAuthorized, columnController.restoreColumn)
+
 export const columnRouter = Router

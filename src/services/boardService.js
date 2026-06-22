@@ -343,6 +343,20 @@ const cloneTemplate = async (userId, templateBoardId) => {
   }
 }
 
+const getArchivedItems = async (boardId) => {
+  try {
+    const archivedCards = await cardModel.getArchivedByBoardId(boardId)
+    const archivedColumns = await columnModel.getArchivedByBoardId(boardId)
+
+    return {
+      cards: archivedCards,
+      columns: archivedColumns
+    }
+  } catch (error) {
+    throw error
+  }
+}
+
 export const boardService = {
   createNew,
   getDetails,
@@ -352,5 +366,6 @@ export const boardService = {
   getTemplates,
   cloneTemplate,
   deleteItem,
-  bulkDeleteItems
+  bulkDeleteItems,
+  getArchivedItems
 }

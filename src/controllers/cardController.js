@@ -65,11 +65,21 @@ const archiveCard = async (req, res, next) => {
   } catch (error) { next(error) }
 }
 
+const restoreCard = async (req, res, next) => {
+  try {
+    const cardId = req.params.id
+    const result = await cardService.restoreCard(cardId)
+
+    res.status(StatusCodes.OK).json({ message: 'Card restored successfully!', card: result })
+  } catch (error) { next(error) }
+}
+
 export const cardController = {
   createNew,
   update,
   uploadAttachment,
   deleteAttachment,
   deleteItem,
-  archiveCard
+  archiveCard,
+  restoreCard
 }

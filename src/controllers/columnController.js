@@ -71,11 +71,23 @@ const archiveColumn = async (req, res, next) => {
   }
 }
 
+const restoreColumn = async (req, res, next) => {
+  try {
+    const columnId = req.params.id
+    const result = await columnService.restoreColumn(columnId)
+
+    res.status(StatusCodes.OK).json({ message: 'Column restored successfully!', column: result })
+  } catch (error) {
+    next(error)
+  }
+}
+
 export const columnController = {
   createNew,
   update,
   deleteItem,
   clearAllCards,
   updateAllCardsLayout,
-  archiveColumn
+  archiveColumn,
+  restoreColumn
 }
