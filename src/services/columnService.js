@@ -126,12 +126,10 @@ const restoreColumn = async (columnId) => {
     // Restore column (unset _destroy)
     const restoredColumn = await columnModel.restoreColumn(columnId)
 
-    // Khôi phục toàn bộ card thuộc column (unset _destroy)
-    // Wait, we need to implement restoreManyByColumnId in cardModel, or just use updateMany.
-    // Let's implement restoreManyByColumnId in cardModel or updateMany here.
-    // Actually, I forgot to add restoreManyByColumnId to cardModel. I will use updateMany via cardModel or add it.
-    // Let's call cardModel.restoreManyByColumnId and I will add it to cardModel next.
-    await cardModel.restoreManyByColumnId(columnId)
+    // Khôi phục column (unset _destroy)
+    // Các cards bên trong vốn dĩ không bị đổi _destroy khi archive column, 
+    // nên không cần (và không được) tự động updateMany _destroy: false cho chúng.
+    // Việc này giúp giữ nguyên trạng thái của những card đã bị archive thủ công từ trước.
 
     // Thêm lại columnId vào mảng columnOrderIds của Board chứa nó
     await boardModel.pushColumnOrderIds(targetColumn)

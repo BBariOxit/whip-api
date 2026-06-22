@@ -68,7 +68,8 @@ const archiveCard = async (req, res, next) => {
 const restoreCard = async (req, res, next) => {
   try {
     const cardId = req.params.id
-    const result = await cardService.restoreCard(cardId)
+    const { newColumnId } = req.body
+    const result = await cardService.restoreCard(cardId, newColumnId)
 
     res.status(StatusCodes.OK).json({ message: 'Card restored successfully!', card: result })
   } catch (error) { next(error) }

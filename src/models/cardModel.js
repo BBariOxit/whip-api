@@ -128,7 +128,8 @@ const update = async (cardId, updateData) => {
 const deleteManyByColumnId = async (columnId) => {
   try {
     const result = await GET_DB().collection(CARD_COLLECTION_NAME).deleteMany({
-      columnId: new ObjectId(columnId)
+      columnId: new ObjectId(columnId),
+      _destroy: false
     })
     return result
   } catch (error) {
@@ -317,11 +318,16 @@ const getArchivedByBoardId = async (boardId) => {
   }
 }
 
-const restoreCard = async (cardId) => {
+const restoreCard = async (cardId, newColumnId = null) => {
   try {
+    const updateData = { _destroy: false, updatedAt: Date.now() }
+    if (newColumnId) {
+      updateData.columnId = new ObjectId(newColumnId)
+    }
+
     const result = await GET_DB().collection(CARD_COLLECTION_NAME).findOneAndUpdate(
       { _id: new ObjectId(cardId) },
-      { $set: { _destroy: false, updatedAt: Date.now() } },
+      { $set: updateData },
       { returnDocument: 'after' }
     )
     return result

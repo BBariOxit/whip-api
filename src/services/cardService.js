@@ -299,7 +299,7 @@ const archiveCard = async (cardId, userInfo) => {
   }
 }
 
-const restoreCard = async (cardId) => {
+const restoreCard = async (cardId, newColumnId) => {
   try {
     const targetCard = await cardModel.findOneById(cardId)
     if (!targetCard) {
@@ -307,10 +307,14 @@ const restoreCard = async (cardId) => {
     }
 
     // Restore card (unset _destroy)
-    const restoredCard = await cardModel.restoreCard(cardId)
+    const restoredCard = await cardModel.restoreCard(cardId, newColumnId)
 
-    // Thêm lại cardId vào mảng cardOrderIds của Column chứa nó
-    await columnModel.pushCardOrderIds(targetCard)
+    // Thêm lại cardId vào mảng cardOrderIds của Column chứa nó (hoặc cột mới nếu có)
+    const pushData = {
+      _id: restoredCard._id,
+      columnId: restoredCard.columnId
+    }
+    await columnModel.pushCardOrderIds(pushData)
 
     return restoredCard
   } catch (error) {
