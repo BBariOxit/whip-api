@@ -282,6 +282,18 @@ const archiveCard = async (cardId) => {
   }
 }
 
+const archiveManyByColumnId = async (columnId) => {
+  try {
+    const result = await GET_DB().collection(CARD_COLLECTION_NAME).updateMany(
+      { columnId: new ObjectId(columnId) },
+      { $set: { _destroy: true, updatedAt: Date.now() } }
+    )
+    return result
+  } catch (error) {
+    throw new Error(error)
+  }
+}
+
 const deleteManyByBoardId = async (boardId) => {
   try {
     const result = await GET_DB().collection(CARD_COLLECTION_NAME).deleteMany({
@@ -310,5 +322,6 @@ export const cardModel = {
   pullCustomFieldValues,
   deleteOneById,
   updateManyCardsLayoutByColumnId,
-  archiveCard
+  archiveCard,
+  archiveManyByColumnId
 }
