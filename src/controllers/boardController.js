@@ -1,6 +1,7 @@
 import { StatusCodes } from 'http-status-codes'
 import { boardService } from '~/services/boardService'
 import { cardService } from '~/services/cardService'
+import { columnService } from '~/services/columnService'
 
 
 const createNew = async (req, res, next) => {
@@ -134,6 +135,16 @@ const getCardTemplates = async (req, res, next) => {
   }
 }
 
+const getColumnTemplates = async (req, res, next) => {
+  try {
+    const boardId = req.params.id
+    const templates = await columnService.getColumnTemplatesByBoardId(boardId)
+    res.status(StatusCodes.OK).json(templates)
+  } catch (error) {
+    next(error)
+  }
+}
+
 export const boardController = {
   createNew,
   getDetails,
@@ -145,5 +156,6 @@ export const boardController = {
   deleteItem,
   bulkDeleteItems,
   getArchivedItems,
-  getCardTemplates
+  getCardTemplates,
+  getColumnTemplates
 }

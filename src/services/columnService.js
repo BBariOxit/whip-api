@@ -140,6 +140,63 @@ const restoreColumn = async (columnId) => {
   }
 }
 
+const saveAsTemplate = async (columnId) => {
+  try {
+    const result = await columnModel.saveAsTemplate(columnId)
+    return result
+  } catch (error) {
+    throw error
+  }
+}
+
+const getColumnTemplatesByBoardId = async (boardId) => {
+  try {
+    const result = await columnModel.getTemplatesByBoardId(boardId)
+    return result
+  } catch (error) {
+    throw error
+  }
+}
+
+const useColumnTemplate = async (templateId, boardId) => {
+  try {
+    const newColumn = await columnModel.useTemplate(templateId, boardId)
+    
+    // push columnOrderIds vào board
+    if (newColumn) {
+      await boardModel.pushColumnOrderIds(newColumn)
+    }
+
+    // fetch lại đầy đủ cards để FE render
+    const fullColumn = await columnModel.getTemplatesByBoardId(boardId)
+    // wait, getTemplatesByBoardId chỉ fetch templates.
+    // get lại column bình thường
+    const db = require('~/config/mongodb').GET_DB()
+    const result = await db.collection(columnModel.COLUMN_COLLECTION_NAME).aggregate([
+      { $match: { _id: newColumn._id } },
+      { $lookup: {
+          from: 'cards',
+          localField: '_id',
+          foreignField: 'columnId',
+          as: 'cards'
+      }}
+    ]).toArray()
+    
+    return result[0] || newColumn
+  } catch (error) {
+    throw error
+  }
+}
+
+const deleteColumnTemplate = async (templateId) => {
+  try {
+    const result = await columnModel.deleteTemplate(templateId)
+    return result
+  } catch (error) {
+    throw error
+  }
+}
+
 export const columnService = {
   createNew,
   update,
@@ -147,5 +204,9 @@ export const columnService = {
   clearAllCards,
   updateAllCardsLayout,
   archiveColumn,
-  restoreColumn
+  restoreColumn,
+  saveAsTemplate,
+  getColumnTemplatesByBoardId,
+  useColumnTemplate,
+  deleteColumnTemplate
 }
