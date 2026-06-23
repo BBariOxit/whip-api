@@ -202,7 +202,7 @@ const saveAsTemplate = async (columnId) => {
     const cards = await db.collection('cards').find({
       columnId: originalColumn._id,
       _destroy: false,
-      isTemplate: false // exclude inner templates if any
+      isTemplate: { $ne: true } // exclude inner templates if any (handles missing field too)
     }).toArray()
 
     // 3. Clone cards as templates

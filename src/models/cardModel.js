@@ -400,6 +400,7 @@ const getTemplatesByBoardId = async (boardId) => {
   try {
     const result = await GET_DB().collection(CARD_COLLECTION_NAME).find({
       boardId: new ObjectId(boardId),
+      columnId: null, // Chỉ lấy standalone Card Templates, bỏ qua các thẻ nằm trong Column Template
       isTemplate: true,
       _destroy: false
     }).toArray()
