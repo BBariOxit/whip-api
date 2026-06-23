@@ -25,4 +25,14 @@ Router.route('/:id/archive')
 Router.route('/:id/restore')
   .put(authMiddleware.isAuthorized, columnController.restoreColumn)
 
+// Template APIs
+Router.route('/:id/save-as-template')
+  .post(authMiddleware.isAuthorized, columnController.saveAsTemplate)
+
+Router.route('/use-template')
+  .post(authMiddleware.isAuthorized, columnController.useColumnTemplate)
+
+Router.route('/templates/:id')
+  .delete(authMiddleware.isAuthorized, columnController.deleteColumnTemplate)
+
 export const columnRouter = Router

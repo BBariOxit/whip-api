@@ -82,6 +82,39 @@ const restoreColumn = async (req, res, next) => {
   }
 }
 
+const saveAsTemplate = async (req, res, next) => {
+  try {
+    const columnId = req.params.id
+    const result = await columnService.saveAsTemplate(columnId)
+    res.status(StatusCodes.OK).json({ message: 'Column saved as template successfully!', template: result })
+  } catch (error) {
+    next(error)
+  }
+}
+
+const useColumnTemplate = async (req, res, next) => {
+  try {
+    const { templateId, boardId } = req.body
+    if (!templateId || !boardId) {
+      return res.status(StatusCodes.BAD_REQUEST).json({ error: 'Missing templateId or boardId' })
+    }
+    const result = await columnService.useColumnTemplate(templateId, boardId)
+    res.status(StatusCodes.CREATED).json(result)
+  } catch (error) {
+    next(error)
+  }
+}
+
+const deleteColumnTemplate = async (req, res, next) => {
+  try {
+    const templateId = req.params.id
+    const result = await columnService.deleteColumnTemplate(templateId)
+    res.status(StatusCodes.OK).json({ message: 'Template deleted successfully!', result })
+  } catch (error) {
+    next(error)
+  }
+}
+
 export const columnController = {
   createNew,
   update,
@@ -89,5 +122,8 @@ export const columnController = {
   clearAllCards,
   updateAllCardsLayout,
   archiveColumn,
-  restoreColumn
+  restoreColumn,
+  saveAsTemplate,
+  useColumnTemplate,
+  deleteColumnTemplate
 }

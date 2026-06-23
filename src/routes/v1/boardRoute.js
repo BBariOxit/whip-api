@@ -21,6 +21,12 @@ Router.route('/bulk-delete')
 Router.route('/:id/archived-items')
   .get(authMiddleware.isAuthorized, boardController.getArchivedItems)
 
+Router.route('/:id/card-templates')
+  .get(authMiddleware.isAuthorized, boardController.getCardTemplates)
+
+Router.route('/:id/column-templates')
+  .get(authMiddleware.isAuthorized, boardController.getColumnTemplates)
+
 Router.route('/:id')
   .get(authMiddleware.isAuthorized, boardController.getDetails)
   .put(authMiddleware.isAuthorized, boardValidation.update, boardController.update)

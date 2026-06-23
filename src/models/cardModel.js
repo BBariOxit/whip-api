@@ -8,7 +8,9 @@ import { CARD_MEMBER_ACTIONS } from '~/utils/constants'
 const CARD_COLLECTION_NAME = 'cards'
 const CARD_COLLECTION_SCHEMA = Joi.object({
   boardId: Joi.string().required().pattern(OBJECT_ID_RULE).message(OBJECT_ID_RULE_MESSAGE),
-  columnId: Joi.string().required().pattern(OBJECT_ID_RULE).message(OBJECT_ID_RULE_MESSAGE),
+  columnId: Joi.string().pattern(OBJECT_ID_RULE).message(OBJECT_ID_RULE_MESSAGE).required().allow(null),
+
+  isTemplate: Joi.boolean().default(false),
 
   title: Joi.string().required().min(3).max(50).trim().strict(),
   layout: Joi.string().valid('compact', 'standard', 'detailed').default('detailed'),
@@ -77,7 +79,7 @@ const createNew = async (data) => {
     const newCardToAdd = {
       ...validData,
       boardId: new ObjectId(validData.boardId),
-      columnId: new ObjectId(validData.columnId)
+      columnId: validData.columnId ? new ObjectId(validData.columnId) : null
     }
     const createdCard = await GET_DB().collection(CARD_COLLECTION_NAME).insertOne(newCardToAdd)
     return createdCard
@@ -348,6 +350,124 @@ const restoreManyByColumnId = async (columnId) => {
   }
 }
 
+// ===== TEMPLATE FUNCTIONS =====
+const saveAsTemplate = async (cardId) => {
+  try {
+    const originalCard = await GET_DB().collection(CARD_COLLECTION_NAME).findOne({
+      _id: new ObjectId(cardId)
+    })
+    if (!originalCard) throw new Error('Card not found!')
+
+    // Clone card data, lọc bỏ những thứ không cần copy
+    const templateData = {
+      boardId: originalCard.boardId,
+      columnId: null, // Template không thuộc column nào
+      title: originalCard.title,
+      layout: originalCard.layout || 'detailed',
+      cover: originalCard.cover || null,
+      memberIds: originalCard.memberIds || [], // NÊN COPY members (vd: task test gán sẵn cho QA)
+      labelIds: originalCard.labelIds || [],
+      totalComments: 0, // Reset comments
+      dueDate: null, // Không copy due date
+      dueComplete: false,
+      // Clone checklists nhưng reset tất cả items về isCompleted: false
+      checklists: (originalCard.checklists || []).map(cl => ({
+        ...cl,
+        _id: new ObjectId().toString(),
+        items: (cl.items || []).map(item => ({
+          ...item,
+          _id: new ObjectId().toString(),
+          isCompleted: false
+        }))
+      })),
+      attachments: originalCard.attachments || [], // PHẢI COPY attachments (vd: mẫu form excel)
+      customFieldValues: originalCard.customFieldValues || [],
+      isTemplate: true,
+      _destroy: false,
+      createdAt: Date.now(),
+      updatedAt: null
+    }
+
+    const result = await GET_DB().collection(CARD_COLLECTION_NAME).insertOne(templateData)
+    return await GET_DB().collection(CARD_COLLECTION_NAME).findOne({ _id: result.insertedId })
+  } catch (error) {
+    throw new Error(error)
+  }
+}
+
+const getTemplatesByBoardId = async (boardId) => {
+  try {
+    const result = await GET_DB().collection(CARD_COLLECTION_NAME).find({
+      boardId: new ObjectId(boardId),
+      columnId: null, // Chỉ lấy standalone Card Templates, bỏ qua các thẻ nằm trong Column Template
+      isTemplate: true,
+      _destroy: false
+    }).toArray()
+    return result
+  } catch (error) {
+    throw new Error(error)
+  }
+}
+
+const useTemplate = async (templateId, targetColumnId) => {
+  try {
+    const templateCard = await GET_DB().collection(CARD_COLLECTION_NAME).findOne({
+      _id: new ObjectId(templateId),
+      isTemplate: true
+    })
+    if (!templateCard) throw new Error('Template not found!')
+
+    const newCardData = {
+      boardId: templateCard.boardId,
+      columnId: new ObjectId(targetColumnId),
+      title: templateCard.title,
+      layout: templateCard.layout || 'detailed',
+      cover: templateCard.cover || null,
+      memberIds: templateCard.memberIds || [],
+      labelIds: templateCard.labelIds || [],
+      totalComments: 0,
+      dueDate: null,
+      dueComplete: false,
+      // Clone checklists với ID mới
+      checklists: (templateCard.checklists || []).map(cl => ({
+        ...cl,
+        _id: new ObjectId().toString(),
+        items: (cl.items || []).map(item => ({
+          ...item,
+          _id: new ObjectId().toString(),
+          isCompleted: false
+        }))
+      })),
+      attachments: (templateCard.attachments || []).map(att => ({
+        ...att,
+        createdAt: Date.now()
+      })),
+      customFieldValues: templateCard.customFieldValues || [],
+      isTemplate: false,
+      _destroy: false,
+      createdAt: Date.now(),
+      updatedAt: null
+    }
+
+    const result = await GET_DB().collection(CARD_COLLECTION_NAME).insertOne(newCardData)
+    return await GET_DB().collection(CARD_COLLECTION_NAME).findOne({ _id: result.insertedId })
+  } catch (error) {
+    throw new Error(error)
+  }
+}
+
+const deleteTemplate = async (templateId) => {
+  try {
+    const result = await GET_DB().collection(CARD_COLLECTION_NAME).deleteOne({
+      _id: new ObjectId(templateId),
+      isTemplate: true
+    })
+    return result
+  } catch (error) {
+    throw new Error(error)
+  }
+}
+
 export const cardModel = {
   CARD_COLLECTION_NAME,
   CARD_COLLECTION_SCHEMA,
@@ -369,5 +489,9 @@ export const cardModel = {
   archiveManyByColumnId,
   getArchivedByBoardId,
   restoreCard,
-  restoreManyByColumnId
+  restoreManyByColumnId,
+  saveAsTemplate,
+  getTemplatesByBoardId,
+  useTemplate,
+  deleteTemplate
 }

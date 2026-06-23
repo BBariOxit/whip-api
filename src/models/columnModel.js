@@ -8,6 +8,7 @@ const COLUMN_COLLECTION_NAME = 'columns'
 const COLUMN_COLLECTION_SCHEMA = Joi.object({
   boardId: Joi.string().required().pattern(OBJECT_ID_RULE).message(OBJECT_ID_RULE_MESSAGE),
   title: Joi.string().required().min(3).max(50).trim().strict(),
+  isTemplate: Joi.boolean().default(false),
 
   // Lưu ý các item trong mảng cardOrderIds là ObjectId nên cần thêm pattern cho chuẩn
   cardOrderIds: Joi.array().items(
@@ -178,6 +179,196 @@ const restoreColumn = async (columnId) => {
   }
 }
 
+const saveAsTemplate = async (columnId) => {
+  try {
+    const db = GET_DB()
+    const originalColumn = await db.collection(COLUMN_COLLECTION_NAME).findOne({ _id: new ObjectId(columnId) })
+    if (!originalColumn) throw new Error('Column not found!')
+
+    // 1. Create Column Template
+    const newColumnTemplate = {
+      boardId: originalColumn.boardId,
+      title: originalColumn.title,
+      isTemplate: true,
+      cardOrderIds: [],
+      createdAt: Date.now(),
+      updatedAt: null,
+      _destroy: false
+    }
+    const createdColumn = await db.collection(COLUMN_COLLECTION_NAME).insertOne(newColumnTemplate)
+    const newColumnId = createdColumn.insertedId
+
+    // 2. Fetch all active cards of the original column
+    const cards = await db.collection('cards').find({
+      columnId: originalColumn._id,
+      _destroy: false,
+      isTemplate: { $ne: true } // exclude inner templates if any (handles missing field too)
+    }).toArray()
+
+    // 3. Clone cards as templates
+    if (cards.length > 0) {
+      const templateCardsToInsert = cards.map(card => ({
+        boardId: card.boardId,
+        columnId: newColumnId,
+        title: card.title,
+        layout: card.layout || 'detailed',
+        description: card.description || null,
+        cover: card.cover || null,
+        memberIds: card.memberIds || [],
+        labelIds: card.labelIds || [],
+        totalComments: 0,
+        dueDate: null,
+        dueComplete: false,
+        checklists: (card.checklists || []).map(cl => ({
+          ...cl,
+          _id: new ObjectId().toString(),
+          items: (cl.items || []).map(item => ({
+            ...item,
+            _id: new ObjectId().toString(),
+            isCompleted: false
+          }))
+        })),
+        attachments: card.attachments || [],
+        customFieldValues: card.customFieldValues || [],
+        isTemplate: true,
+        _destroy: false,
+        createdAt: Date.now(),
+        updatedAt: null
+      }))
+
+      const insertedCards = await db.collection('cards').insertMany(templateCardsToInsert)
+      const insertedCardIds = Object.values(insertedCards.insertedIds)
+      
+      // Update cardOrderIds of the new Column Template
+      await db.collection(COLUMN_COLLECTION_NAME).updateOne(
+        { _id: newColumnId },
+        { $set: { cardOrderIds: insertedCardIds } }
+      )
+    }
+
+    return await db.collection(COLUMN_COLLECTION_NAME).findOne({ _id: newColumnId })
+  } catch (error) {
+    throw new Error(error)
+  }
+}
+
+const getTemplatesByBoardId = async (boardId) => {
+  try {
+    const result = await GET_DB().collection(COLUMN_COLLECTION_NAME).aggregate([
+      { $match: { boardId: new ObjectId(boardId), isTemplate: true, _destroy: false } },
+      { $lookup: {
+          from: 'cards',
+          localField: '_id',
+          foreignField: 'columnId',
+          as: 'cards'
+      }}
+    ]).toArray()
+    return result
+  } catch (error) {
+    throw new Error(error)
+  }
+}
+
+const useTemplate = async (templateId, boardId) => {
+  try {
+    const db = GET_DB()
+    const templateColumn = await db.collection(COLUMN_COLLECTION_NAME).findOne({
+      _id: new ObjectId(templateId),
+      isTemplate: true
+    })
+    if (!templateColumn) throw new Error('Column Template not found!')
+
+    // 1. Create new Column
+    const newColumnData = {
+      boardId: new ObjectId(boardId),
+      title: templateColumn.title,
+      isTemplate: false,
+      cardOrderIds: [],
+      createdAt: Date.now(),
+      updatedAt: null,
+      _destroy: false
+    }
+    const createdColumn = await db.collection(COLUMN_COLLECTION_NAME).insertOne(newColumnData)
+    const newColumnId = createdColumn.insertedId
+
+    // 2. Fetch all template cards inside this column template
+    const templateCards = await db.collection('cards').find({
+      columnId: templateColumn._id,
+      isTemplate: true,
+      _destroy: false
+    }).toArray()
+
+    // 3. Clone template cards as real cards
+    if (templateCards.length > 0) {
+      const realCardsToInsert = templateCards.map(card => ({
+        boardId: new ObjectId(boardId),
+        columnId: newColumnId,
+        title: card.title,
+        layout: card.layout || 'detailed',
+        description: card.description || null,
+        cover: card.cover || null,
+        memberIds: card.memberIds || [],
+        labelIds: card.labelIds || [],
+        totalComments: 0,
+        dueDate: null,
+        dueComplete: false,
+        checklists: (card.checklists || []).map(cl => ({
+          ...cl,
+          _id: new ObjectId().toString(),
+          items: (cl.items || []).map(item => ({
+            ...item,
+            _id: new ObjectId().toString(),
+            isCompleted: false
+          }))
+        })),
+        attachments: (card.attachments || []).map(att => ({
+          ...att,
+          createdAt: Date.now()
+        })),
+        customFieldValues: card.customFieldValues || [],
+        isTemplate: false,
+        _destroy: false,
+        createdAt: Date.now(),
+        updatedAt: null
+      }))
+
+      const insertedCards = await db.collection('cards').insertMany(realCardsToInsert)
+      const insertedCardIds = Object.values(insertedCards.insertedIds)
+      
+      // Update cardOrderIds of the new Column
+      await db.collection(COLUMN_COLLECTION_NAME).updateOne(
+        { _id: newColumnId },
+        { $set: { cardOrderIds: insertedCardIds } }
+      )
+    }
+
+    return await db.collection(COLUMN_COLLECTION_NAME).findOne({ _id: newColumnId })
+  } catch (error) {
+    throw new Error(error)
+  }
+}
+
+const deleteTemplate = async (templateId) => {
+  try {
+    const db = GET_DB()
+    const result = await db.collection(COLUMN_COLLECTION_NAME).deleteOne({
+      _id: new ObjectId(templateId),
+      isTemplate: true
+    })
+    
+    if (result.deletedCount > 0) {
+      // Xoá các template cards con
+      await db.collection('cards').deleteMany({
+        columnId: new ObjectId(templateId),
+        isTemplate: true
+      })
+    }
+    return result
+  } catch (error) {
+    throw new Error(error)
+  }
+}
+
 export const columnModel = {
   COLUMN_COLLECTION_NAME,
   COLUMN_COLLECTION_SCHEMA,
@@ -191,5 +382,9 @@ export const columnModel = {
   emptyCardOrderIds,
   archiveColumn,
   getArchivedByBoardId,
-  restoreColumn
+  restoreColumn,
+  saveAsTemplate,
+  getTemplatesByBoardId,
+  useTemplate,
+  deleteTemplate
 }

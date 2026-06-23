@@ -75,6 +75,34 @@ const restoreCard = async (req, res, next) => {
   } catch (error) { next(error) }
 }
 
+// ===== TEMPLATE CONTROLLERS =====
+const saveAsTemplate = async (req, res, next) => {
+  try {
+    const cardId = req.params.id
+    const template = await cardService.saveAsTemplate(cardId)
+
+    res.status(StatusCodes.CREATED).json(template)
+  } catch (error) { next(error) }
+}
+
+const useTemplate = async (req, res, next) => {
+  try {
+    const { templateId, targetColumnId } = req.body
+    const newCard = await cardService.useTemplate(templateId, targetColumnId)
+
+    res.status(StatusCodes.CREATED).json(newCard)
+  } catch (error) { next(error) }
+}
+
+const deleteTemplate = async (req, res, next) => {
+  try {
+    const templateId = req.params.id
+    const result = await cardService.deleteTemplate(templateId)
+
+    res.status(StatusCodes.OK).json({ message: 'Template deleted successfully!', result })
+  } catch (error) { next(error) }
+}
+
 export const cardController = {
   createNew,
   update,
@@ -82,5 +110,8 @@ export const cardController = {
   deleteAttachment,
   deleteItem,
   archiveCard,
-  restoreCard
-}
+  restoreCard,
+  saveAsTemplate,
+  useTemplate,
+  deleteTemplate
+}

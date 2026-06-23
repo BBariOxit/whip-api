@@ -322,6 +322,49 @@ const restoreCard = async (cardId, newColumnId) => {
   }
 }
 
+// ===== TEMPLATE SERVICES =====
+const saveAsTemplate = async (cardId) => {
+  try {
+    const template = await cardModel.saveAsTemplate(cardId)
+    return template
+  } catch (error) {
+    throw error
+  }
+}
+
+const getTemplatesByBoardId = async (boardId) => {
+  try {
+    const templates = await cardModel.getTemplatesByBoardId(boardId)
+    return templates
+  } catch (error) {
+    throw error
+  }
+}
+
+const useTemplate = async (templateId, targetColumnId) => {
+  try {
+    const newCard = await cardModel.useTemplate(templateId, targetColumnId)
+
+    // Cập nhật mảng cardOrderIds của Column đích
+    if (newCard) {
+      await columnModel.pushCardOrderIds(newCard)
+    }
+
+    return newCard
+  } catch (error) {
+    throw error
+  }
+}
+
+const deleteTemplate = async (templateId) => {
+  try {
+    const result = await cardModel.deleteTemplate(templateId)
+    return result
+  } catch (error) {
+    throw error
+  }
+}
+
 export const cardService = {
   createNew,
   update,
@@ -329,5 +372,9 @@ export const cardService = {
   deleteAttachment,
   deleteItem,
   archiveCard,
-  restoreCard
+  restoreCard,
+  saveAsTemplate,
+  getTemplatesByBoardId,
+  useTemplate,
+  deleteTemplate
 }
