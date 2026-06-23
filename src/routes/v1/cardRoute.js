@@ -9,6 +9,13 @@ const Router = express.Router()
 Router.route('/')
   .post(authMiddleware.isAuthorized, cardValidation.createNew, cardController.createNew)
 
+// Template routes (phải khai báo trước /:id để tránh conflict)
+Router.route('/use-template')
+  .post(authMiddleware.isAuthorized, cardController.useTemplate)
+
+Router.route('/templates/:id')
+  .delete(authMiddleware.isAuthorized, cardController.deleteTemplate)
+
 Router.route('/:id')
   .put(
     authMiddleware.isAuthorized,
@@ -24,6 +31,10 @@ Router.route('/:id/archive')
 Router.route('/:id/restore')
   .put(authMiddleware.isAuthorized, cardController.restoreCard)
 
+// Save as Template
+Router.route('/:id/save-as-template')
+  .post(authMiddleware.isAuthorized, cardController.saveAsTemplate)
+
 // Attachment APIs: Upload và Xóa file đính kèm
 Router.route('/:id/attachments')
   .post(
@@ -32,4 +43,4 @@ Router.route('/:id/attachments')
     cardController.uploadAttachment)
   .delete(authMiddleware.isAuthorized, cardController.deleteAttachment)
 
-export const cardRouter = Router
+export const cardRouter = Router
