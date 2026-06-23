@@ -214,7 +214,7 @@ const saveAsTemplate = async (columnId) => {
         layout: card.layout || 'detailed',
         description: card.description || null,
         cover: card.cover || null,
-        memberIds: [],
+        memberIds: card.memberIds || [],
         labelIds: card.labelIds || [],
         totalComments: 0,
         dueDate: null,
@@ -228,7 +228,7 @@ const saveAsTemplate = async (columnId) => {
             isCompleted: false
           }))
         })),
-        attachments: [],
+        attachments: card.attachments || [],
         customFieldValues: card.customFieldValues || [],
         isTemplate: true,
         _destroy: false,
@@ -307,7 +307,7 @@ const useTemplate = async (templateId, boardId) => {
         layout: card.layout || 'detailed',
         description: card.description || null,
         cover: card.cover || null,
-        memberIds: [],
+        memberIds: card.memberIds || [],
         labelIds: card.labelIds || [],
         totalComments: 0,
         dueDate: null,
@@ -321,7 +321,10 @@ const useTemplate = async (templateId, boardId) => {
             isCompleted: false
           }))
         })),
-        attachments: [],
+        attachments: (card.attachments || []).map(att => ({
+          ...att,
+          createdAt: Date.now()
+        })),
         customFieldValues: card.customFieldValues || [],
         isTemplate: false,
         _destroy: false,

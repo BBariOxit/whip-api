@@ -364,9 +364,8 @@ const saveAsTemplate = async (cardId) => {
       columnId: null, // Template không thuộc column nào
       title: originalCard.title,
       layout: originalCard.layout || 'detailed',
-      description: originalCard.description || null,
       cover: originalCard.cover || null,
-      memberIds: [], // Không copy members
+      memberIds: originalCard.memberIds || [], // NÊN COPY members (vd: task test gán sẵn cho QA)
       labelIds: originalCard.labelIds || [],
       totalComments: 0, // Reset comments
       dueDate: null, // Không copy due date
@@ -381,7 +380,7 @@ const saveAsTemplate = async (cardId) => {
           isCompleted: false
         }))
       })),
-      attachments: [], // Không copy attachments
+      attachments: originalCard.attachments || [], // PHẢI COPY attachments (vd: mẫu form excel)
       customFieldValues: originalCard.customFieldValues || [],
       isTemplate: true,
       _destroy: false,
@@ -423,9 +422,8 @@ const useTemplate = async (templateId, targetColumnId) => {
       columnId: new ObjectId(targetColumnId),
       title: templateCard.title,
       layout: templateCard.layout || 'detailed',
-      description: templateCard.description || null,
       cover: templateCard.cover || null,
-      memberIds: [],
+      memberIds: templateCard.memberIds || [],
       labelIds: templateCard.labelIds || [],
       totalComments: 0,
       dueDate: null,
@@ -440,7 +438,10 @@ const useTemplate = async (templateId, targetColumnId) => {
           isCompleted: false
         }))
       })),
-      attachments: [],
+      attachments: (templateCard.attachments || []).map(att => ({
+        ...att,
+        createdAt: Date.now()
+      })),
       customFieldValues: templateCard.customFieldValues || [],
       isTemplate: false,
       _destroy: false,
