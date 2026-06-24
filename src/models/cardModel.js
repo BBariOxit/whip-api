@@ -479,7 +479,7 @@ const duplicateCard = async (cardId, targetColumnId) => {
       ...originalCard,
       _id: new ObjectId(),
       columnId: new ObjectId(targetColumnId),
-      title: `${originalCard.title} (Copy)`,
+      title: originalCard.title,
       createdAt: Date.now(),
       updatedAt: null,
       totalComments: 0,
