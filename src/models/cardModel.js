@@ -468,6 +468,45 @@ const deleteTemplate = async (templateId) => {
   }
 }
 
+const duplicateCard = async (cardId, targetColumnId) => {
+  try {
+    const originalCard = await GET_DB().collection(CARD_COLLECTION_NAME).findOne({
+      _id: new ObjectId(cardId)
+    })
+    if (!originalCard) throw new Error('Card not found!')
+
+    const newCardData = {
+      ...originalCard,
+      _id: new ObjectId(),
+      columnId: new ObjectId(targetColumnId),
+      title: `${originalCard.title} (Copy)`,
+      createdAt: Date.now(),
+      updatedAt: null,
+      totalComments: 0,
+      // Clone checklists với ID mới và reset về false
+      checklists: (originalCard.checklists || []).map(cl => ({
+        ...cl,
+        _id: new ObjectId().toString(),
+        items: (cl.items || []).map(item => ({
+          ...item,
+          _id: new ObjectId().toString(),
+          isCompleted: false
+        }))
+      })),
+      // Clone attachments
+      attachments: (originalCard.attachments || []).map(att => ({
+        ...att,
+        createdAt: Date.now()
+      }))
+    }
+
+    const result = await GET_DB().collection(CARD_COLLECTION_NAME).insertOne(newCardData)
+    return await GET_DB().collection(CARD_COLLECTION_NAME).findOne({ _id: result.insertedId })
+  } catch (error) {
+    throw new Error(error)
+  }
+}
+
 export const cardModel = {
   CARD_COLLECTION_NAME,
   CARD_COLLECTION_SCHEMA,
@@ -493,5 +532,6 @@ export const cardModel = {
   saveAsTemplate,
   getTemplatesByBoardId,
   useTemplate,
-  deleteTemplate
+  deleteTemplate,
+  duplicateCard
 }

@@ -365,6 +365,21 @@ const deleteTemplate = async (templateId) => {
   }
 }
 
+const duplicateCard = async (cardId, targetColumnId) => {
+  try {
+    const newCard = await cardModel.duplicateCard(cardId, targetColumnId)
+
+    // Cập nhật mảng cardOrderIds của Column đích
+    if (newCard) {
+      await columnModel.pushCardOrderIds(newCard)
+    }
+
+    return newCard
+  } catch (error) {
+    throw error
+  }
+}
+
 export const cardService = {
   createNew,
   update,
@@ -376,5 +391,6 @@ export const cardService = {
   saveAsTemplate,
   getTemplatesByBoardId,
   useTemplate,
-  deleteTemplate
+  deleteTemplate,
+  duplicateCard
 }

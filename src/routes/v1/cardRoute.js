@@ -13,6 +13,9 @@ Router.route('/')
 Router.route('/use-template')
   .post(authMiddleware.isAuthorized, cardController.useTemplate)
 
+Router.route('/duplicate')
+  .post(authMiddleware.isAuthorized, cardValidation.duplicate, cardController.duplicateCard)
+
 Router.route('/templates/:id')
   .delete(authMiddleware.isAuthorized, cardController.deleteTemplate)
 

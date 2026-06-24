@@ -12,6 +12,17 @@ const createNew = async (req, res, next) => {
   }
 }
 
+const duplicateCard = async (req, res, next) => {
+  try {
+    const { cardId, targetColumnId } = req.body
+    const newCard = await cardService.duplicateCard(cardId, targetColumnId)
+
+    res.status(StatusCodes.CREATED).json(newCard)
+  } catch (error) {
+    next(error)
+  }
+}
+
 const update = async (req, res, next) => {
   try {
     const cardId = req.params.id
@@ -113,5 +124,6 @@ export const cardController = {
   restoreCard,
   saveAsTemplate,
   useTemplate,
-  deleteTemplate
+  deleteTemplate,
+  duplicateCard
 }
