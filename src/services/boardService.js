@@ -49,7 +49,7 @@ const getDetails = async (userId, boardId) => {
     const isAuthorized = isOwner || isMember
 
     if (board.type === 'private' && !isAuthorized) {
-      throw new ApiError(StatusCodes.FORBIDDEN, 'Cút! Board Private đéo dành cho người ngoài!')
+      throw new ApiError(StatusCodes.FORBIDDEN, 'Access denied. You do not have permission to view this private board.')
     }
 
     // // B1: structuredClone board ra một cái mới để xử lý, không ảnh hưởng tới board ban đầu,

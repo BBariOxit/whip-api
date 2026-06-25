@@ -54,7 +54,7 @@ const updateVisibility = async (req, res, next) => {
 
     const updatedBoard = await boardService.updateVisibility(userId, boardId, type)
 
-    res.status(StatusCodes.OK).json({ message: `Đã chuyển Board sang chế độ ${type}`, board: updatedBoard })
+    res.status(StatusCodes.OK).json({ message: `Board visibility changed to ${type} successfully!`, board: updatedBoard })
   } catch (error) {
     next(error)
   }
