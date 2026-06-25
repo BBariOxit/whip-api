@@ -3,6 +3,8 @@ import { columnModel } from '~/models/columnModel'
 import { cardModel } from '~/models/cardModel'
 import ApiError from '~/utils/ApiError'
 import { StatusCodes } from 'http-status-codes'
+import { GET_DB } from '~/config/mongodb'
+import { ObjectId } from 'mongodb'
 
 const createNew = async (reqBody) => {
   try {
@@ -190,8 +192,86 @@ const useColumnTemplate = async (templateId, boardId) => {
 
 const deleteColumnTemplate = async (templateId) => {
   try {
-    const result = await columnModel.deleteTemplate(templateId)
+    const result = await GET_DB().collection(columnModel.COLUMN_COLLECTION_NAME).deleteOne({
+      _id: new ObjectId(templateId)
+    })
     return result
+  } catch (error) {
+    throw error
+  }
+}
+
+const duplicateColumn = async (reqBody) => {
+  try {
+    const { columnId, boardId, targetIndex } = reqBody
+    const db = GET_DB()
+
+    const originalColumn = await db.collection(columnModel.COLUMN_COLLECTION_NAME).findOne({ _id: new ObjectId(columnId) })
+    if (!originalColumn) throw new ApiError(StatusCodes.NOT_FOUND, 'Column not found!')
+
+    const originalCards = await db.collection(cardModel.CARD_COLLECTION_NAME).find({ columnId: new ObjectId(columnId) }).toArray()
+
+    const newColumnId = new ObjectId()
+    const newCardOrderIds = []
+    const newCardsToInsert = []
+
+    if (originalColumn.cardOrderIds && originalColumn.cardOrderIds.length > 0) {
+      originalColumn.cardOrderIds.forEach(oldCardId => {
+        const cardData = originalCards.find(c => c._id.toString() === oldCardId.toString())
+        
+        if (cardData) {
+          const newCardId = new ObjectId()
+          newCardOrderIds.push(newCardId)
+
+          // 1. Loại bỏ các dữ liệu rác không cần copy
+          const { comments, ...cardWithoutComments } = cardData
+
+          // 2. Reset lại tiến độ các Checklists về 0 và cấp lại ID mới
+          let resetChecklists = []
+          if (cardWithoutComments.checklists && cardWithoutComments.checklists.length > 0) {
+            resetChecklists = cardWithoutComments.checklists.map(cl => ({
+              ...cl,
+              _id: new ObjectId().toString(),
+              items: cl.items?.map(item => ({ ...item, _id: new ObjectId().toString(), isCompleted: false })) || []
+            }))
+          }
+
+          // 3. Giữ nguyên Attachments (Schema không dùng _id cho attachments nên copy thẳng)
+          const copiedAttachments = cardWithoutComments.attachments || []
+
+          newCardsToInsert.push({
+            ...cardWithoutComments,
+            _id: newCardId,
+            columnId: newColumnId,
+            checklists: resetChecklists,
+            attachments: copiedAttachments,
+            isTemplate: false,
+            totalComments: 0, // Đảm bảo xóa đếm comments
+            createdAt: Date.now(),
+            updatedAt: null
+          })
+        }
+      })
+    }
+
+    const newColumnData = {
+      ...originalColumn,
+      _id: newColumnId,
+      title: `${originalColumn.title} (Copy)`,
+      cardOrderIds: newCardOrderIds,
+      createdAt: Date.now(),
+      updatedAt: null
+    }
+
+    await db.collection(columnModel.COLUMN_COLLECTION_NAME).insertOne(newColumnData)
+    if (newCardsToInsert.length > 0) {
+      await db.collection(cardModel.CARD_COLLECTION_NAME).insertMany(newCardsToInsert)
+    }
+
+    // Insert column vào board ở vị trí targetIndex
+    await boardModel.insertColumnIdAtIndex(boardId, newColumnId.toString(), targetIndex)
+
+    return { ...newColumnData, cards: newCardsToInsert }
   } catch (error) {
     throw error
   }
@@ -208,5 +288,6 @@ export const columnService = {
   saveAsTemplate,
   getColumnTemplatesByBoardId,
   useColumnTemplate,
-  deleteColumnTemplate
+  deleteColumnTemplate,
+  duplicateColumn
 }

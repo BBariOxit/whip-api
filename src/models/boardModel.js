@@ -166,6 +166,27 @@ const pushColumnOrderIds = async (column) => {
   }
 }
 
+// Chèn 1 giá trị column id vào một vị trí chỉ định trong mảng columnOrderIds
+const insertColumnIdAtIndex = async (boardId, columnId, targetIndex) => {
+  try {
+    const result = await GET_DB().collection(BOARD_COLLECTION_NAME).findOneAndUpdate(
+      { _id: new ObjectId(boardId) },
+      {
+        $push: {
+          columnOrderIds: {
+            $each: [new ObjectId(columnId)],
+            $position: targetIndex
+          }
+        }
+      },
+      { returnDocument: 'after' }
+    )
+    return result
+  } catch (error) {
+    throw new Error(error)
+  }
+}
+
 // Lấy một phần tử columnId ra khỏi mảng columnOrderIds
 // Dùng $pull trong mongodb ở trường hợp này để lấy một phần tử ra khỏi mảng rồi xóa nó đi
 const pullColumnOrderIds = async (column) => {
@@ -343,6 +364,7 @@ export const boardModel = {
   findOneById,
   getDetails,
   pushColumnOrderIds,
+  insertColumnIdAtIndex,
   update,
   pullColumnOrderIds,
   getBoards,
