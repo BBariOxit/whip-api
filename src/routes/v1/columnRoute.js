@@ -35,4 +35,7 @@ Router.route('/use-template')
 Router.route('/templates/:id')
   .delete(authMiddleware.isAuthorized, columnController.deleteColumnTemplate)
 
+Router.route('/duplicate')
+  .post(authMiddleware.isAuthorized, columnController.duplicateColumn)
+
 export const columnRouter = Router

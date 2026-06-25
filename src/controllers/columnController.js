@@ -115,6 +115,15 @@ const deleteColumnTemplate = async (req, res, next) => {
   }
 }
 
+const duplicateColumn = async (req, res, next) => {
+  try {
+    const newColumnWithCards = await columnService.duplicateColumn(req.body)
+    res.status(StatusCodes.OK).json(newColumnWithCards)
+  } catch (error) {
+    next(error)
+  }
+}
+
 export const columnController = {
   createNew,
   update,
@@ -125,5 +134,6 @@ export const columnController = {
   restoreColumn,
   saveAsTemplate,
   useColumnTemplate,
-  deleteColumnTemplate
+  deleteColumnTemplate,
+  duplicateColumn
 }
