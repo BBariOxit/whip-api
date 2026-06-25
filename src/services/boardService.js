@@ -43,6 +43,15 @@ const getDetails = async (userId, boardId) => {
       throw new ApiError(StatusCodes.NOT_FOUND, 'board not found!')
     }
 
+    // 👑 CHỐT CHẶN BẢO MẬT (Gatekeeper)
+    const isOwner = userId && board.ownerIds?.some(id => id.toString() === userId)
+    const isMember = userId && board.memberIds?.some(id => id.toString() === userId)
+    const isAuthorized = isOwner || isMember
+
+    if (board.type === 'private' && !isAuthorized) {
+      throw new ApiError(StatusCodes.FORBIDDEN, 'Cút! Board Private đéo dành cho người ngoài!')
+    }
+
     // // B1: structuredClone board ra một cái mới để xử lý, không ảnh hưởng tới board ban đầu,
     // // tùy mục đích về sau mà có cần structuredClone hay không.
     // const resBoard = structuredClone(board)
@@ -83,6 +92,29 @@ const update = async (boardId, reqBody) => {
       updatedAt: Date.now()
     }
     const updatedBoard = await boardModel.update(boardId, updateData)
+
+    return updatedBoard
+  } catch (error) {
+    throw error
+  }
+}
+
+const updateVisibility = async (userId, boardId, type) => {
+  try {
+    const board = await boardModel.findOneById(boardId)
+    if (!board) {
+      throw new ApiError(StatusCodes.NOT_FOUND, 'Board not found!')
+    }
+
+    const isOwner = board.ownerIds?.some(id => id.toString() === userId)
+    if (!isOwner) {
+      throw new ApiError(StatusCodes.FORBIDDEN, 'Only owners can update board visibility!')
+    }
+
+    const updatedBoard = await boardModel.update(boardId, {
+      type: type,
+      updatedAt: Date.now()
+    })
 
     return updatedBoard
   } catch (error) {
@@ -361,6 +393,7 @@ export const boardService = {
   createNew,
   getDetails,
   update,
+  updateVisibility,
   moveCardifferentColumn,
   getBoards,
   getTemplates,

@@ -28,9 +28,12 @@ Router.route('/:id/column-templates')
   .get(authMiddleware.isAuthorized, boardController.getColumnTemplates)
 
 Router.route('/:id')
-  .get(authMiddleware.isAuthorized, boardController.getDetails)
+  .get(authMiddleware.optionalAuth, boardController.getDetails)
   .put(authMiddleware.isAuthorized, boardValidation.update, boardController.update)
   .delete(authMiddleware.isAuthorized, boardController.deleteItem)
+
+Router.route('/:id/visibility')
+  .put(authMiddleware.isAuthorized, boardController.updateVisibility)
 
 // API hỗ trợ việc di chuyển card giữa các column khác nhau trong 1 board
 Router.route('/supports/moving_card')
