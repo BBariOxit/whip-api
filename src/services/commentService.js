@@ -87,10 +87,10 @@ const updateComment = async (commentId, reqBody, userInfo) => {
 const deleteComment = async (commentId, userInfo) => {
   try {
     const targetComment = await commentModel.findOneById(commentId)
-    if (!targetComment) throw new Error('Comment không tồn tại!')
+    if (!targetComment) throw new Error('Comment not found!')
 
     if (targetComment.userId.toString() !== userInfo._id.toString()) {
-      throw new Error('Bạn không có quyền xóa comment này!')
+      throw new Error('You do not have permission to delete this comment!')
     }
 
     if (targetComment.parentId) {
@@ -107,7 +107,7 @@ const deleteComment = async (commentId, userInfo) => {
     }
 
     return {
-      resultMessage: 'Xóa bình luận thành công!',
+      resultMessage: 'Comment deleted successfully!',
       cardId: targetComment.cardId.toString(),
       parentId: targetComment.parentId ? targetComment.parentId.toString() : null
     }

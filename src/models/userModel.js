@@ -17,11 +17,11 @@ const USER_COLLECTION_SCHEMA = Joi.object({
   // username cắt ra từ email sẽ có khả năng không unique bởi vì sẽ có những tên email trùng nhau nhưng từ các nhà cung cấp khác nhau
   username: Joi.string().required().trim().strict(),
   displayName: Joi.string().required().trim().strict(),
-  avatar: Joi.string().default(null),
+  avatar: Joi.string().allow(null).default(null),
   role: Joi.string().valid(...Object.values(USER_ROLES)).default(USER_ROLES.CLIENT),
 
   isActive: Joi.boolean().default(false),
-  verifyToken: Joi.string(),
+  verifyToken: Joi.string().allow(null),
 
   // Phân biệt loại đăng nhập: email/password, google, github
   loginType: Joi.string().valid('email', 'google', 'github').default('email'),

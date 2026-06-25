@@ -38,9 +38,31 @@ const isAuthorized = async (req, res, next) => {
     // thẳng tay trả về mã 401 cho phía FE gọi api sign_out luôn
     next(new ApiError(StatusCodes.UNAUTHORIZED, 'Unauthorized!'))
   }
-  
+}
+
+// Middleware để xác thực token nhưng không bắt buộc (dành cho API có thể truy cập public)
+const optionalAuth = async (req, res, next) => {
+  const clientAccessToken = req.cookies?.accessToken
+
+  if (!clientAccessToken) {
+    // Không có token, xem như Guest
+    req.jwtDecoded = null
+    return next()
+  }
+
+  try {
+    const accessTokenDecoded = await jwtProvider.verifyToken(clientAccessToken, env.ACCESS_TOKEN_SECRET_SIGNATURE)
+    req.jwtDecoded = accessTokenDecoded
+    next()
+  } catch (error) {
+    // Nếu có token nhưng lỗi (hết hạn, sai chữ ký, v.v.), vẫn cho qua nhưng với vai trò Guest
+    // Hoặc có thể trả về lỗi tuỳ thuộc vào requirement, nhưng ở đây ta xem như Guest
+    req.jwtDecoded = null
+    next()
+  }
 }
 
 export const authMiddleware = {
-  isAuthorized
+  isAuthorized,
+  optionalAuth
 }

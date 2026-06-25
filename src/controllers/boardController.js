@@ -24,7 +24,7 @@ const createNew = async (req, res, next) => {
 
 const getDetails = async (req, res, next) => {
   try {
-    const userId = req.jwtDecoded._id
+    const userId = req.jwtDecoded?._id
     const boardId = req.params.id
 
     // điều hướng dữ liệu qua tầng service
@@ -41,6 +41,20 @@ const update = async (req, res, next) => {
     const updatedBoard = await boardService.update(boardId, req.body)
 
     res.status(StatusCodes.OK).json(updatedBoard)
+  } catch (error) {
+    next(error)
+  }
+}
+
+const updateVisibility = async (req, res, next) => {
+  try {
+    const userId = req.jwtDecoded._id
+    const boardId = req.params.id
+    const { type } = req.body
+
+    const updatedBoard = await boardService.updateVisibility(userId, boardId, type)
+
+    res.status(StatusCodes.OK).json({ message: `Board visibility changed to ${type} successfully!`, board: updatedBoard })
   } catch (error) {
     next(error)
   }
@@ -149,6 +163,7 @@ export const boardController = {
   createNew,
   getDetails,
   update,
+  updateVisibility,
   moveCardifferentColumn,
   getBoards,
   getTemplates,
