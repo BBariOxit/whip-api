@@ -23,6 +23,9 @@ const BOARD_COLLECTION_SCHEMA = Joi.object({
     color2: Joi.string().optional()
   }).default({ type: 'gradient', color1: '#8a2387', color2: '#e94057' }),
 
+  workspaceId: Joi.string().pattern(OBJECT_ID_RULE).message(OBJECT_ID_RULE_MESSAGE).default(null).allow(null),
+
+
   // admin của board
   ownerIds: Joi.array().items(
     Joi.string().pattern(OBJECT_ID_RULE).message(OBJECT_ID_RULE_MESSAGE)
@@ -139,6 +142,22 @@ const getDetails = async (userId, boardId) => {
         localField: '_id',
         foreignField: 'boardId',
         as: 'labels'
+      } },
+      { $lookup: {
+        from: 'workspaces', // workspaceModel.WORKSPACE_COLLECTION_NAME
+        localField: 'workspaceId',
+        foreignField: '_id',
+        as: 'workspace'
+      } },
+      // unwind workspace to object instead of array (if workspace exists)
+      { $unwind: { path: '$workspace', preserveNullAndEmptyArrays: true } },
+      // lookup workspaceMembers
+      { $lookup: {
+        from: userModel.USER_COLLECTION_NAME,
+        localField: 'workspace.memberIds',
+        foreignField: '_id',
+        as: 'workspaceMembers',
+        pipeline: [{ $project: { 'password': 0, 'verifyToken': 0 } }]
       } }
     ]).toArray()
     return result[0] || null
@@ -211,6 +230,13 @@ const update = async (boardId, updateData) => {
     if (updateData.columnOrderIds) {
       updateData.columnOrderIds = updateData.columnOrderIds.map(_id => (new ObjectId(_id)))
     }
+    if (updateData.workspaceId !== undefined) {
+      if (updateData.workspaceId && updateData.workspaceId !== 'null') {
+        updateData.workspaceId = new ObjectId(updateData.workspaceId)
+      } else {
+        updateData.workspaceId = null
+      }
+    }
 
     const result = await GET_DB().collection(BOARD_COLLECTION_NAME).findOneAndUpdate(
       { _id: new ObjectId(boardId) },
@@ -240,7 +266,15 @@ const getBoards = async (userId, page, itemsPerPage, queryFilters) => {
     // xử lý query filter cho từng trường hợp search board
     if (queryFilters) {
       Object.keys(queryFilters).forEach(key => {
-        queryConditions.push({ [key]: { $regex: new RegExp(queryFilters[key], 'i') } })
+        if (key === 'workspaceId') {
+          if (queryFilters[key] && queryFilters[key] !== 'null') {
+            queryConditions.push({ workspaceId: new ObjectId(queryFilters[key]) })
+          } else {
+            queryConditions.push({ workspaceId: null })
+          }
+        } else {
+          queryConditions.push({ [key]: { $regex: new RegExp(queryFilters[key], 'i') } })
+        }
       })
     }
 
