@@ -74,8 +74,13 @@ const getBoards = async (req, res, next) => {
   try {
     const userId = req.jwtDecoded._id
 
-    const { page, itemsPerPage, q } = req.query
-    const queryFilters = q
+    const { page, itemsPerPage, q, workspaceId } = req.query
+    const queryFilters = q || {}
+    
+    if (workspaceId !== undefined) {
+      queryFilters.workspaceId = workspaceId
+    }
+
     const results = await boardService.getBoards(userId, page, itemsPerPage, queryFilters)
 
     res.status(StatusCodes.OK).json(results)

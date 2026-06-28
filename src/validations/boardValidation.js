@@ -26,7 +26,8 @@ const createNew = async (req, res, next) => {
       type: Joi.string().valid('gradient', 'solid', 'image').required(),
       color1: Joi.string().required(),
       color2: Joi.string().optional()
-    }).optional()
+    }).optional(),
+    workspaceId: Joi.string().pattern(OBJECT_ID_RULE).message(OBJECT_ID_RULE_MESSAGE).allow(null).optional()
   })
 
   try {

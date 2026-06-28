@@ -9,6 +9,7 @@ import { labelRouter } from './labelRoute'
 import { activityRouter } from './activityRoute'
 import { customFieldRouter } from './customFieldRoute'
 import { commentRouter } from './commentRoute'
+import { workspaceRoute } from './workspaceRoute'
 
 const Router = express.Router()
 //check APIs v1/status
@@ -36,5 +37,8 @@ Router.use('/activities', activityRouter)
 
 // Comment APIs
 Router.use('/comments', commentRouter)
+
+// Workspace APIs
+Router.use('/workspaces', workspaceRoute)
 
 export const APIs_V1 = Router
