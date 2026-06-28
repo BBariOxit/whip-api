@@ -78,6 +78,10 @@ const createNew = async (userId, data) => {
       ownerIds: [new ObjectId(userId)]
     }
 
+    if (newBoardToAdd.workspaceId) {
+      newBoardToAdd.workspaceId = new ObjectId(newBoardToAdd.workspaceId)
+    }
+
     const createdBoard = await GET_DB().collection(BOARD_COLLECTION_NAME).insertOne(newBoardToAdd)
     return createdBoard
   } catch (error) {
@@ -387,6 +391,18 @@ const deleteOneById = async (boardId) => {
   }
 }
 
+const findByWorkspaceId = async (workspaceId) => {
+  try {
+    const results = await GET_DB().collection(BOARD_COLLECTION_NAME).find({
+      workspaceId: new ObjectId(workspaceId),
+      _destroy: false
+    }).toArray()
+    return results
+  } catch (error) {
+    throw new Error(error)
+  }
+}
+
 export const boardModel = {
   BOARD_COLLECTION_NAME,
   BOARD_COLLECTION_SCHEMA,
@@ -403,5 +419,6 @@ export const boardModel = {
   pushCustomField,
   updateCustomField,
   pullCustomField,
-  deleteOneById
+  deleteOneById,
+  findByWorkspaceId
 }

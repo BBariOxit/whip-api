@@ -54,10 +54,38 @@ const getWorkspacesByUserId = async (userId) => {
   }
 }
 
+const deleteOneById = async (workspaceId) => {
+  try {
+    const db = await GET_DB()
+    const result = await db.collection(WORKSPACE_COLLECTION_NAME).deleteOne({
+      _id: new ObjectId(workspaceId)
+    })
+    return result
+  } catch (error) { 
+    throw new Error(error) 
+  }
+}
+
+const update = async (workspaceId, validData) => {
+  try {
+    const db = await GET_DB()
+    const result = await db.collection(WORKSPACE_COLLECTION_NAME).findOneAndUpdate(
+      { _id: new ObjectId(workspaceId) },
+      { $set: validData },
+      { returnDocument: 'after' }
+    )
+    return result
+  } catch (error) { 
+    throw new Error(error) 
+  }
+}
+
 export const workspaceModel = {
   WORKSPACE_COLLECTION_NAME,
   WORKSPACE_COLLECTION_SCHEMA,
   createNew,
   findById,
-  getWorkspacesByUserId
+  getWorkspacesByUserId,
+  deleteOneById,
+  update
 }
