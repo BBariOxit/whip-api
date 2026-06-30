@@ -29,6 +29,9 @@ const getDetails = async (req, res, next) => {
 
     // điều hướng dữ liệu qua tầng service
     const board = await boardService.getDetails(userId, boardId)
+    if (board) {
+      board.userAccessRole = req.boardAccessRole || 'viewer'
+    }
     res.status(StatusCodes.OK).json(board)
   } catch (error) {
     next(error)

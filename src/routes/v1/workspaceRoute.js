@@ -30,8 +30,8 @@ Router.route('/accept-invite')
 Router.route('/:id')
   // Mọi member đều xem được workspace details
   .get(authMiddleware.isAuthorized, requireWorkspaceRole([OWNER, ADMIN, MEMBER]), workspaceController.getDetails)
-  // Chỉ Owner + Admin sửa workspace (đổi tên, mô tả)
-  .put(authMiddleware.isAuthorized, requireWorkspaceRole([OWNER, ADMIN]), workspaceValidation.update, workspaceController.update)
+  // Chỉ Owner sửa workspace (đổi tên, mô tả)
+  .put(authMiddleware.isAuthorized, requireWorkspaceRole([OWNER]), workspaceValidation.update, workspaceController.update)
   // Chỉ Owner xóa workspace
   .delete(authMiddleware.isAuthorized, requireWorkspaceRole([OWNER]), workspaceController.deleteItem)
 

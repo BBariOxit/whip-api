@@ -141,7 +141,8 @@ const inviteMember = async (inviterId, workspaceId, reqBody) => {
     )
 
     // 5. BẮN EMAIL BẰNG BREVO
-    const inviteLink = `${env.WEBSITE_DOMAIN}/accept-invite?token=${inviteToken}&workspaceId=${workspaceId}`
+    const websiteDomain = env.BUILD_MODE === 'dev' ? env.WEBSITE_DOMAIN_DEVELOPMENT : env.WEBSITE_DOMAIN_PRODUCTION
+    const inviteLink = `${websiteDomain}/accept-invite?token=${inviteToken}&workspaceId=${workspaceId}`
     const subject = `You are invited to join the Workspace: ${workspace.title}`
     const htmlContent = `
       <h3>Hello,</h3>
@@ -274,7 +275,10 @@ const updateMemberRole = async (actorUserId, workspaceId, targetUserId, newRole)
     const actorMember = workspace.members.find(m => m.userId && m.userId.toString() === actorUserId.toString())
     const actorRole = actorMember?.role
 
-    const targetMember = workspace.members.find(m => m.userId && m.userId.toString() === targetUserId.toString())
+    const targetMember = workspace.members.find(m => 
+      (m.userId && m.userId.toString() === targetUserId.toString()) || 
+      (m.email === targetUserId)
+    )
     if (!targetMember) {
       throw new ApiError(StatusCodes.NOT_FOUND, 'Target user is not a member of this workspace!')
     }

@@ -71,7 +71,12 @@ const getWorkspacesByUserId = async (userId) => {
   try {
     const db = GET_DB()
     const results = await db.collection(WORKSPACE_COLLECTION_NAME).find({
-      'members.userId': new ObjectId(userId),
+      members: {
+        $elemMatch: {
+          userId: new ObjectId(userId),
+          status: 'active'
+        }
+      },
       _destroy: false
     }).sort({ createdAt: -1 }).toArray()
     return results
@@ -205,14 +210,18 @@ const removeMember = async (workspaceId, userIdOrEmail) => {
   }
 }
 
-// Cập nhật role của một member trong workspace
-const updateMemberRole = async (workspaceId, userId, newRole) => {
+// Cập nhật role của member
+const updateMemberRole = async (workspaceId, userIdOrEmail, newRole) => {
   try {
     const db = GET_DB()
+    const matchCondition = userIdOrEmail.includes('@')
+      ? { email: userIdOrEmail }
+      : { userId: new ObjectId(userIdOrEmail) }
+
     const result = await db.collection(WORKSPACE_COLLECTION_NAME).findOneAndUpdate(
       {
         _id: new ObjectId(workspaceId),
-        'members.userId': new ObjectId(userId)
+        'members': { $elemMatch: matchCondition }
       },
       {
         $set: {
@@ -238,7 +247,8 @@ const findByMemberWithRole = async (workspaceId, userId, allowedRoles) => {
       members: {
         $elemMatch: {
           userId: new ObjectId(userId),
-          role: { $in: allowedRoles }
+          role: { $in: allowedRoles },
+          status: 'active'
         }
       }
     })

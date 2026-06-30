@@ -108,7 +108,7 @@ const updateVisibility = async (userId, boardId, type) => {
 
     const isOwner = board.ownerIds?.some(id => id.toString() === userId)
     if (!isOwner) {
-      throw new ApiError(StatusCodes.FORBIDDEN, 'Only owners can update board visibility!')
+      throw new ApiError(StatusCodes.FORBIDDEN, 'Only the creator of this board can change its visibility!')
     }
 
     const updatedBoard = await boardModel.update(boardId, {

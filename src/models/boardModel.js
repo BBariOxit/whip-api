@@ -258,22 +258,37 @@ const getBoards = async (userId, page, itemsPerPage, queryFilters) => {
       // điều kiện 1: board chưa bị xóa
       { _destroy: false },
       // Điều kiện 02: không phải là template
-      { isTemplate: { $ne: true } },
-      // Điều kiện 03: cái thằng userId đang thực hiện request này nó phải thuộc
-      // vào một trong 2 cái mảng ownerIds hoặc memberIds, sử dụng toán tử $all của mongodb
-      { $or: [
-        { ownerIds: { $all: [new ObjectId(userId)] } },
-        { memberIds: { $all: [new ObjectId(userId)] } }
-      ] }
+      { isTemplate: { $ne: true } }
     ]
 
-    // xử lý query filter cho từng trường hợp search board
+    // Điều kiện 03: Phân quyền xem Board
+    if (queryFilters && queryFilters.workspaceId && queryFilters.workspaceId !== 'null') {
+      queryConditions.push({ workspaceId: new ObjectId(queryFilters.workspaceId) })
+      // Nếu đang xem trong 1 workspace cụ thể -> được xem board workspace_visible, public, HOẶC là member/owner của private board
+      queryConditions.push({
+        $or: [
+          { type: BOARD_TYPES.WORKSPACE_VISIBLE },
+          { type: BOARD_TYPES.PUBLIC },
+          { ownerIds: { $all: [new ObjectId(userId)] } },
+          { memberIds: { $all: [new ObjectId(userId)] } }
+        ]
+      })
+      delete queryFilters.workspaceId // Xóa để không bị duyệt lại ở vòng lặp filter dưới
+    } else {
+      // Nếu đang xem ở ngoài (Personal boards) -> Bắt buộc phải là owner hoặc member
+      queryConditions.push({
+        $or: [
+          { ownerIds: { $all: [new ObjectId(userId)] } },
+          { memberIds: { $all: [new ObjectId(userId)] } }
+        ]
+      })
+    }
+
+    // xử lý query filter cho từng trường hợp search board (còn lại)
     if (queryFilters) {
       Object.keys(queryFilters).forEach(key => {
         if (key === 'workspaceId') {
-          if (queryFilters[key] && queryFilters[key] !== 'null') {
-            queryConditions.push({ workspaceId: new ObjectId(queryFilters[key]) })
-          } else {
+          if (queryFilters[key] === 'null') {
             queryConditions.push({ workspaceId: null })
           }
         } else {
