@@ -21,6 +21,16 @@ const getWorkspacesByUserId = async (req, res, next) => {
   }
 }
 
+const getDetails = async (req, res, next) => {
+  try {
+    const workspaceId = req.params.id
+    const workspace = await workspaceService.getDetails(workspaceId)
+    res.status(StatusCodes.OK).json(workspace)
+  } catch (error) {
+    next(error)
+  }
+}
+
 const deleteItem = async (req, res, next) => {
   try {
     const userId = req.jwtDecoded._id
@@ -42,9 +52,72 @@ const update = async (req, res, next) => {
   }
 }
 
+const inviteMember = async (req, res, next) => {
+  try {
+    const inviterId = req.jwtDecoded._id
+    const workspaceId = req.params.id
+    const result = await workspaceService.inviteMember(inviterId, workspaceId, req.body)
+    res.status(StatusCodes.CREATED).json(result)
+  } catch (error) {
+    next(error)
+  }
+}
+
+const removeMember = async (req, res, next) => {
+  try {
+    const actorUserId = req.jwtDecoded._id
+    const workspaceId = req.params.id
+    const targetUserId = req.params.targetUserId
+    const result = await workspaceService.removeMember(actorUserId, workspaceId, targetUserId)
+    res.status(StatusCodes.OK).json(result)
+  } catch (error) {
+    next(error)
+  }
+}
+
+const updateMemberRole = async (req, res, next) => {
+  try {
+    const actorUserId = req.jwtDecoded._id
+    const workspaceId = req.params.id
+    const targetUserId = req.params.targetUserId
+    const { role } = req.body
+    const result = await workspaceService.updateMemberRole(actorUserId, workspaceId, targetUserId, role)
+    res.status(StatusCodes.OK).json(result)
+  } catch (error) {
+    next(error)
+  }
+}
+
+const leaveWorkspace = async (req, res, next) => {
+  try {
+    const userId = req.jwtDecoded._id
+    const workspaceId = req.params.id
+    const result = await workspaceService.leaveWorkspace(userId, workspaceId)
+    res.status(StatusCodes.OK).json(result)
+  } catch (error) {
+    next(error)
+  }
+}
+
+const getMembers = async (req, res, next) => {
+  try {
+    const workspaceId = req.params.id
+    const members = await workspaceService.getMembers(workspaceId)
+    res.status(StatusCodes.OK).json(members)
+  } catch (error) {
+    next(error)
+  }
+}
+
 export const workspaceController = {
   createNew,
   getWorkspacesByUserId,
+  getDetails,
   deleteItem,
-  update
+  update,
+  inviteMember,
+  removeMember,
+  updateMemberRole,
+  leaveWorkspace,
+  getMembers
 }

@@ -16,7 +16,7 @@ const BOARD_COLLECTION_SCHEMA = Joi.object({
   title: Joi.string().required().min(3).max(50).trim().strict(),
   slug: Joi.string().required().min(3).trim().strict(),
   description: Joi.string().required().min(3).max(256).trim().strict(),
-  type: Joi.string().valid(BOARD_TYPES.PUBLIC, BOARD_TYPES.PRIVATE).required(),
+  type: Joi.string().valid(BOARD_TYPES.PUBLIC, BOARD_TYPES.PRIVATE, BOARD_TYPES.WORKSPACE_VISIBLE).required(),
   background: Joi.object({
     type: Joi.string().valid('gradient', 'solid', 'image').required(),
     color1: Joi.string().required(),
