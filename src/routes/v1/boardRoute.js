@@ -2,6 +2,7 @@ import express from 'express'
 import { boardController } from '~/controllers/boardController'
 import { authMiddleware } from '~/middlewares/authMiddleware'
 import { boardValidation } from '~/validations/boardValidation'
+import { requireBoardAdmin, requireBoardRole } from '~/middlewares/rbacMiddleware'
 
 const Router = express.Router()
 
@@ -19,24 +20,24 @@ Router.route('/bulk-delete')
   .delete(authMiddleware.isAuthorized, boardController.bulkDeleteItems)
 
 Router.route('/:id/archived-items')
-  .get(authMiddleware.isAuthorized, boardController.getArchivedItems)
+  .get(authMiddleware.isAuthorized, requireBoardRole(['admin', 'member']), boardController.getArchivedItems)
 
 Router.route('/:id/card-templates')
-  .get(authMiddleware.isAuthorized, boardController.getCardTemplates)
+  .get(authMiddleware.isAuthorized, requireBoardRole(['admin', 'member']), boardController.getCardTemplates)
 
 Router.route('/:id/column-templates')
-  .get(authMiddleware.isAuthorized, boardController.getColumnTemplates)
+  .get(authMiddleware.isAuthorized, requireBoardRole(['admin', 'member']), boardController.getColumnTemplates)
 
 Router.route('/:id')
-  .get(authMiddleware.optionalAuth, boardController.getDetails)
-  .put(authMiddleware.isAuthorized, boardValidation.update, boardController.update)
-  .delete(authMiddleware.isAuthorized, boardController.deleteItem)
+  .get(authMiddleware.optionalAuth, requireBoardRole(['admin', 'member', 'viewer']), boardController.getDetails)
+  .put(authMiddleware.isAuthorized, requireBoardAdmin, boardValidation.update, boardController.update)
+  .delete(authMiddleware.isAuthorized, requireBoardAdmin, boardController.deleteItem)
 
 Router.route('/:id/visibility')
-  .put(authMiddleware.isAuthorized, boardController.updateVisibility)
+  .put(authMiddleware.isAuthorized, requireBoardAdmin, boardController.updateVisibility)
 
 // API hỗ trợ việc di chuyển card giữa các column khác nhau trong 1 board
 Router.route('/supports/moving_card')
-  .put(authMiddleware.isAuthorized, boardValidation.moveCardifferentColumn, boardController.moveCardifferentColumn)
+  .put(authMiddleware.isAuthorized, requireBoardRole(['admin', 'member']), boardValidation.moveCardifferentColumn, boardController.moveCardifferentColumn)
 
 export const boardRouter = Router

@@ -11,9 +11,16 @@ export const WHITELIST_DOMAINS = [
 ]
 
 
+export const WORKSPACE_ROLES = {
+  OWNER: 'owner',
+  ADMIN: 'admin',
+  MEMBER: 'member'
+}
+
 export const BOARD_TYPES = {
   PUBLIC: 'public',
-  PRIVATE: 'private'
+  PRIVATE: 'private',
+  WORKSPACE_VISIBLE: 'workspace_visible'
 }
 
 export const WEBSITE_DOMAIN = (env.BUILD_MODE === 'dev')
@@ -24,7 +31,8 @@ export const DEFAULT_PAGE = 1
 export const DEFAULT_ITEMS_PER_PAGE = 10
 
 export const INVITATION_TYPES = {
-  BOARD_INVITATION: 'BOARD_INVITATION'
+  BOARD_INVITATION: 'BOARD_INVITATION',
+  WORKSPACE_INVITATION: 'WORKSPACE_INVITATION'
 }
 
 export const BOARD_INVITATION_STATUS = {

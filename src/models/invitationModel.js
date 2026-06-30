@@ -5,6 +5,7 @@ import { OBJECT_ID_RULE, OBJECT_ID_RULE_MESSAGE } from '~/utils/validators'
 import { INVITATION_TYPES, BOARD_INVITATION_STATUS } from '~/utils/constants'
 import { userModel } from './userModel'
 import { boardModel } from './boardModel'
+import { workspaceModel } from './workspaceModel'
 
 // Define Collection (name & schema)
 const INVITATION_COLLECTION_NAME = 'invitations'
@@ -16,6 +17,12 @@ const INVITATION_COLLECTION_SCHEMA = Joi.object({
   // Lời mời là board thì sẽ lưu thêm dữ liệu boardInvitation - optional
   boardInvitation: Joi.object({
     boardId: Joi.string().required().pattern(OBJECT_ID_RULE).message(OBJECT_ID_RULE_MESSAGE),
+    status: Joi.string().required().valid(...Object.values(BOARD_INVITATION_STATUS))
+  }).optional(),
+
+  // Lời mời vào workspace
+  workspaceInvitation: Joi.object({
+    workspaceId: Joi.string().required().pattern(OBJECT_ID_RULE).message(OBJECT_ID_RULE_MESSAGE),
     status: Joi.string().required().valid(...Object.values(BOARD_INVITATION_STATUS))
   }).optional(),
 
@@ -51,6 +58,30 @@ const createNewBoardInvitation = async (data) => {
     return createdInvitation
   } catch (error) { 
     throw new Error(error) 
+  }
+}
+
+const createNewWorkspaceInvitation = async (data) => {
+  try {
+    const validData = await validateBeforeCreate(data)
+
+    let newInvitationToAdd = {
+      ...validData,
+      inviterId: new ObjectId(validData.inviterId),
+      inviteeId: new ObjectId(validData.inviteeId)
+    }
+
+    if (validData.workspaceInvitation) {
+      newInvitationToAdd.workspaceInvitation = {
+        ...validData.workspaceInvitation,
+        workspaceId: new ObjectId(validData.workspaceInvitation.workspaceId)
+      }
+    }
+
+    const createdInvitation = await GET_DB().collection(INVITATION_COLLECTION_NAME).insertOne(newInvitationToAdd)
+    return createdInvitation
+  } catch (error) {
+    throw new Error(error)
   }
 }
 
@@ -121,6 +152,12 @@ const findByUser = async (userId) => {
         localField: 'boardInvitation.boardId', // thông tin board được invite
         foreignField: '_id',
         as: 'board'
+      } },
+      { $lookup: {
+        from: workspaceModel.WORKSPACE_COLLECTION_NAME,
+        localField: 'workspaceInvitation.workspaceId', // thông tin workspace được invite
+        foreignField: '_id',
+        as: 'workspace'
       } }
     ]).toArray()
     return results
@@ -133,6 +170,7 @@ export const invitationModel = {
   INVITATION_COLLECTION_NAME,
   INVITATION_COLLECTION_SCHEMA,
   createNewBoardInvitation,
+  createNewWorkspaceInvitation,
   findOneById,
   update,
   findByUser
