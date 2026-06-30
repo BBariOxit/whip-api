@@ -2,7 +2,7 @@ import Joi from 'joi'
 import { ObjectId } from 'mongodb'
 import { GET_DB } from '~/config/mongodb'
 import { WORKSPACE_ROLES } from '~/utils/constants'
-import { OBJECT_ID_RULE, OBJECT_ID_RULE_MESSAGE } from '~/utils/validators'
+import { OBJECT_ID_RULE, OBJECT_ID_RULE_MESSAGE, EMAIL_RULE, EMAIL_RULE_MESSAGE } from '~/utils/validators'
 
 const WORKSPACE_COLLECTION_NAME = 'workspaces'
 
@@ -10,15 +10,18 @@ const WORKSPACE_COLLECTION_SCHEMA = Joi.object({
   title: Joi.string().required().min(3).max(50).trim().strict(),
   description: Joi.string().max(255).trim().strict().default(''),
 
-  // Embedded members array thay thế cho ownerId + memberIds
+  // Embedded members array
   members: Joi.array().items(
     Joi.object({
-      userId: Joi.string().required().pattern(OBJECT_ID_RULE).message(OBJECT_ID_RULE_MESSAGE),
+      userId: Joi.string().pattern(OBJECT_ID_RULE).message(OBJECT_ID_RULE_MESSAGE).allow(null).default(null),
+      email: Joi.string().pattern(EMAIL_RULE).message(EMAIL_RULE_MESSAGE).required(),
       role: Joi.string().valid(
         WORKSPACE_ROLES.OWNER,
         WORKSPACE_ROLES.ADMIN,
         WORKSPACE_ROLES.MEMBER
       ).default(WORKSPACE_ROLES.MEMBER),
+      status: Joi.string().valid('active', 'pending').default('active'),
+      inviteToken: Joi.string().allow(null).default(null),
       joinedAt: Joi.date().timestamp('javascript').default(Date.now)
     })
   ).default([]),
@@ -29,7 +32,7 @@ const WORKSPACE_COLLECTION_SCHEMA = Joi.object({
 })
 
 // Hàm tạo Workspace mới — người tạo tự động trở thành Owner
-const createNew = async (userId, data) => {
+const createNew = async (userId, email, data) => {
   try {
     const validData = await WORKSPACE_COLLECTION_SCHEMA.validateAsync(data, { abortEarly: false })
     const insertData = {
@@ -37,7 +40,10 @@ const createNew = async (userId, data) => {
       members: [
         {
           userId: new ObjectId(userId),
+          email: email,
           role: WORKSPACE_ROLES.OWNER,
+          status: 'active',
+          inviteToken: null,
           joinedAt: Date.now()
         }
       ]
@@ -124,16 +130,71 @@ const addMember = async (workspaceId, userId, role = WORKSPACE_ROLES.MEMBER) => 
   }
 }
 
-// Xóa member ra khỏi workspace
-const removeMember = async (workspaceId, userId) => {
+// Tìm thành viên theo email trong workspace
+const findMemberByEmail = async (workspaceId, email) => {
+  try {
+    const db = GET_DB()
+    const workspace = await db.collection(WORKSPACE_COLLECTION_NAME).findOne({
+      _id: new ObjectId(workspaceId),
+      members: { $elemMatch: { email: email } }
+    })
+    return workspace ? workspace.members.find(m => m.email === email) : null
+  } catch (error) {
+    throw new Error(error)
+  }
+}
+
+// Chấp nhận lời mời (chuyển status pending -> active, gán userId, xóa token)
+const acceptInviteMember = async (workspaceId, inviteToken, userId) => {
   try {
     const db = GET_DB()
     const result = await db.collection(WORKSPACE_COLLECTION_NAME).findOneAndUpdate(
+      { 
+        _id: new ObjectId(workspaceId),
+        'members.inviteToken': inviteToken
+      },
+      {
+        $set: {
+          'members.$.userId': new ObjectId(userId),
+          'members.$.status': 'active',
+          'members.$.inviteToken': null,
+          updatedAt: Date.now()
+        }
+      },
+      { returnDocument: 'after' }
+    )
+    return result
+  } catch (error) {
+    throw new Error(error)
+  }
+}
+
+// Tìm workspace theo invite token
+const findByInviteToken = async (inviteToken) => {
+  try {
+    const db = GET_DB()
+    const result = await db.collection(WORKSPACE_COLLECTION_NAME).findOne({
+      'members.inviteToken': inviteToken
+    })
+    return result
+  } catch (error) {
+    throw new Error(error)
+  }
+}
+
+// Xóa member ra khỏi workspace (được dùng để xóa member hoặc hủy pending invite)
+const removeMember = async (workspaceId, userIdOrEmail) => {
+  try {
+    const db = GET_DB()
+    // Nếu là ID thì xóa theo userId, nếu là email thì xóa theo email (cho pending member)
+    const pullCondition = userIdOrEmail.includes('@') 
+      ? { email: userIdOrEmail }
+      : { userId: new ObjectId(userIdOrEmail) }
+      
+    const result = await db.collection(WORKSPACE_COLLECTION_NAME).findOneAndUpdate(
       { _id: new ObjectId(workspaceId) },
       {
-        $pull: {
-          members: { userId: new ObjectId(userId) }
-        },
+        $pull: { members: pullCondition },
         $set: { updatedAt: Date.now() }
       },
       { returnDocument: 'after' }
@@ -218,10 +279,13 @@ const getDetailsWithMembers = async (workspaceId) => {
             userId: '$members.userId',
             role: '$members.role',
             joinedAt: '$members.joinedAt',
-            email: '$members.userInfo.email',
-            displayName: '$members.userInfo.displayName',
-            avatar: '$members.userInfo.avatar',
-            username: '$members.userInfo.username'
+            status: '$members.status',
+            // Dùng email gốc trong members array (trường hợp pending chưa có userInfo), 
+            // nếu active thì dùng email của userInfo (nhưng thực ra trùng nhau)
+            email: '$members.email', 
+            displayName: { $ifNull: ['$members.userInfo.displayName', 'Pending User'] },
+            avatar: { $ifNull: ['$members.userInfo.avatar', null] },
+            username: { $ifNull: ['$members.userInfo.username', null] }
           }
         }
       } }
@@ -244,5 +308,8 @@ export const workspaceModel = {
   removeMember,
   updateMemberRole,
   findByMemberWithRole,
-  getDetailsWithMembers
+  getDetailsWithMembers,
+  findMemberByEmail,
+  acceptInviteMember,
+  findByInviteToken
 }

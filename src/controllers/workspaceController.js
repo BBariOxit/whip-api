@@ -4,7 +4,8 @@ import { workspaceService } from '~/services/workspaceService'
 const createNew = async (req, res, next) => {
   try {
     const userId = req.jwtDecoded._id
-    const createdWorkspace = await workspaceService.createNew(userId, req.body)
+    const email = req.jwtDecoded.email
+    const createdWorkspace = await workspaceService.createNew(userId, email, req.body)
     res.status(StatusCodes.CREATED).json(createdWorkspace)
   } catch (error) {
     next(error)
@@ -57,7 +58,24 @@ const inviteMember = async (req, res, next) => {
     const inviterId = req.jwtDecoded._id
     const workspaceId = req.params.id
     const result = await workspaceService.inviteMember(inviterId, workspaceId, req.body)
-    res.status(StatusCodes.CREATED).json(result)
+    res.status(StatusCodes.OK).json(result)
+  } catch (error) {
+    next(error)
+  }
+}
+
+const acceptInvite = async (req, res, next) => {
+  try {
+    const userId = req.jwtDecoded._id
+    const userEmail = req.jwtDecoded.email
+    const { token, workspaceId } = req.body
+    
+    if (!token || !workspaceId) {
+      throw new ApiError(StatusCodes.BAD_REQUEST, 'Token and workspaceId are required!')
+    }
+
+    const result = await workspaceService.acceptInvite(userId, userEmail, token, workspaceId)
+    res.status(StatusCodes.OK).json(result)
   } catch (error) {
     next(error)
   }
@@ -116,6 +134,7 @@ export const workspaceController = {
   deleteItem,
   update,
   inviteMember,
+  acceptInvite,
   removeMember,
   updateMemberRole,
   leaveWorkspace,

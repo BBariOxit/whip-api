@@ -18,6 +18,10 @@ Router.route('/')
   .get(authMiddleware.isAuthorized, workspaceController.getWorkspacesByUserId)
   .post(authMiddleware.isAuthorized, workspaceValidation.createNew, workspaceController.createNew)
 
+// Accept invite (user clicks link in email)
+Router.route('/accept-invite')
+  .put(authMiddleware.isAuthorized, workspaceController.acceptInvite)
+
 // =============================================
 // Routes CẦN workspace role check (RBAC)
 // =============================================

@@ -26,16 +26,21 @@ const migrate = async () => {
   try {
     await client.connect()
     const db = client.db(DATABASE_NAME)
+    const usersCollection = db.collection('users')
     const workspacesCollection = db.collection('workspaces')
 
-    // Lấy tất cả workspace có schema cũ (có field ownerId)
-    const oldWorkspaces = await workspacesCollection.find({
-      ownerId: { $exists: true }
+    // Lấy tất cả workspace chưa migrate (có field ownerId)
+    // HOẶC workspace đã migrate nhưng members thiếu email (để backfill email cho data cũ)
+    const workspacesToMigrate = await workspacesCollection.find({
+      $or: [
+        { ownerId: { $exists: true } },
+        { 'members.email': { $exists: false } }
+      ]
     }).toArray()
 
-    console.log(`📋 Found ${oldWorkspaces.length} workspace(s) to migrate.`)
+    console.log(`📋 Found ${workspacesToMigrate.length} workspace(s) to migrate or backfill.`)
 
-    if (oldWorkspaces.length === 0) {
+    if (workspacesToMigrate.length === 0) {
       console.log('✅ No workspaces need migration. All good!')
       return
     }
@@ -43,33 +48,65 @@ const migrate = async () => {
     let successCount = 0
     let errorCount = 0
 
-    for (const ws of oldWorkspaces) {
+    for (const ws of workspacesToMigrate) {
       try {
         const members = []
-        const processedUserIds = new Set()
+        
+        // Nếu workspace cũ (chưa migrate lần nào) thì lấy ownerId/memberIds
+        // Nếu workspace đã migrate rồi nhưng thiếu email thì duyệt mảng members cũ
+        
+        if (ws.ownerId || ws.memberIds) {
+          // TRƯỜNG HỢP 1: TỪ FLAT SCHEMA CŨ
+          const processedUserIds = new Set()
 
-        // 1. Owner → role: 'owner'
-        if (ws.ownerId) {
-          const ownerIdStr = ws.ownerId.toString()
-          members.push({
-            userId: ws.ownerId,
-            role: 'owner',
-            joinedAt: ws.createdAt || Date.now()
-          })
-          processedUserIds.add(ownerIdStr)
-        }
+          if (ws.ownerId) {
+            const ownerIdStr = ws.ownerId.toString()
+            const user = await usersCollection.findOne({ _id: ws.ownerId })
+            members.push({
+              userId: ws.ownerId,
+              email: user ? user.email : 'unknown@example.com',
+              role: 'owner',
+              status: 'active',
+              inviteToken: null,
+              joinedAt: ws.createdAt || Date.now()
+            })
+            processedUserIds.add(ownerIdStr)
+          }
 
-        // 2. memberIds (trừ owner) → role: 'member'
-        if (ws.memberIds && Array.isArray(ws.memberIds)) {
-          for (const memberId of ws.memberIds) {
-            const memberIdStr = memberId.toString()
-            if (!processedUserIds.has(memberIdStr)) {
+          if (ws.memberIds && Array.isArray(ws.memberIds)) {
+            for (const memberId of ws.memberIds) {
+              const memberIdStr = memberId.toString()
+              if (!processedUserIds.has(memberIdStr)) {
+                const user = await usersCollection.findOne({ _id: memberId })
+                members.push({
+                  userId: memberId,
+                  email: user ? user.email : 'unknown@example.com',
+                  role: 'member',
+                  status: 'active',
+                  inviteToken: null,
+                  joinedAt: ws.createdAt || Date.now()
+                })
+                processedUserIds.add(memberIdStr)
+              }
+            }
+          }
+        } else if (ws.members && Array.isArray(ws.members)) {
+          // TRƯỜNG HỢP 2: ĐÃ MIGRATE NHƯNG THIẾU EMAIL
+          for (const member of ws.members) {
+            if (member.userId && !member.email) {
+              const user = await usersCollection.findOne({ _id: member.userId })
               members.push({
-                userId: memberId,
-                role: 'member',
-                joinedAt: ws.createdAt || Date.now()
+                ...member,
+                email: user ? user.email : 'unknown@example.com',
+                status: member.status || 'active',
+                inviteToken: member.inviteToken || null
               })
-              processedUserIds.add(memberIdStr)
+            } else {
+              members.push({
+                ...member,
+                status: member.status || 'active',
+                inviteToken: member.inviteToken || null
+              })
             }
           }
         }

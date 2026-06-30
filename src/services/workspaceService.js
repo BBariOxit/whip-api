@@ -9,9 +9,13 @@ import { WORKSPACE_ROLES, INVITATION_TYPES, BOARD_INVITATION_STATUS } from '~/ut
 import { GET_DB } from '~/config/mongodb'
 import { ObjectId } from 'mongodb'
 
-const createNew = async (userId, reqBody) => {
+import crypto from 'crypto'
+import { env } from '~/config/environment'
+import { brevoProvider } from '~/providers/brevoProvider'
+
+const createNew = async (userId, email, reqBody) => {
   try {
-    const createdWorkspace = await workspaceModel.createNew(userId, reqBody)
+    const createdWorkspace = await workspaceModel.createNew(userId, email, reqBody)
     const getNewWorkspace = await workspaceModel.findById(createdWorkspace.insertedId)
     return getNewWorkspace
   } catch (error) {
@@ -48,9 +52,9 @@ const deleteItem = async (userId, workspaceId) => {
       throw new ApiError(StatusCodes.NOT_FOUND, 'Workspace not found!')
     }
 
-    // Double-check: Chỉ Owner mới được xóa workspace (middleware đã chặn nhưng service nên verify lại)
+    // Double-check: Chỉ Owner mới được xóa workspace
     const ownerMember = targetWorkspace.members.find(
-      m => m.userId.toString() === userId.toString() && m.role === WORKSPACE_ROLES.OWNER
+      m => m.userId && m.userId.toString() === userId.toString() && m.role === WORKSPACE_ROLES.OWNER
     )
     if (!ownerMember) {
       throw new ApiError(StatusCodes.FORBIDDEN, 'Only the workspace owner can delete this workspace!')
@@ -87,57 +91,101 @@ const update = async (workspaceId, reqBody) => {
 }
 
 /**
- * Mời member mới vào workspace
- * - Tìm user theo email
- * - Kiểm tra user đã là member chưa
- * - Thêm user vào members array
- * - Tạo workspace invitation record
+ * Mời member mới vào workspace qua email (Pending status)
  */
 const inviteMember = async (inviterId, workspaceId, reqBody) => {
   try {
     const { inviteeEmail, role } = reqBody
 
-    // Tìm user được mời
-    const invitee = await userModel.findOneByEmail(inviteeEmail)
-    if (!invitee) {
-      throw new ApiError(StatusCodes.NOT_FOUND, 'User with this email not found!')
-    }
-
-    // Kiểm tra user đã là member chưa
     const workspace = await workspaceModel.findById(workspaceId)
     if (!workspace) {
       throw new ApiError(StatusCodes.NOT_FOUND, 'Workspace not found!')
     }
 
-    const alreadyMember = workspace.members.find(
-      m => m.userId.toString() === invitee._id.toString()
-    )
-    if (alreadyMember) {
-      throw new ApiError(StatusCodes.CONFLICT, 'This user is already a member of this workspace!')
-    }
-
-    // Thêm member vào workspace
-    const memberRole = role || WORKSPACE_ROLES.MEMBER
-    const updatedWorkspace = await workspaceModel.addMember(workspaceId, invitee._id.toString(), memberRole)
-
-    // Tạo workspace invitation record (để lưu lịch sử mời)
-    try {
-      const invitationData = {
-        inviterId: inviterId,
-        inviteeId: invitee._id.toString(),
-        type: INVITATION_TYPES.WORKSPACE_INVITATION,
-        workspaceInvitation: {
-          workspaceId: workspaceId,
-          status: BOARD_INVITATION_STATUS.ACCEPTED // Accepted ngay vì được thêm trực tiếp
-        }
+    // 1. Check xem user đã ở trong Workspace chưa?
+    const existingMember = workspace.members.find(m => m.email === inviteeEmail)
+    if (existingMember) {
+      if (existingMember.status === 'active') {
+        throw new ApiError(StatusCodes.CONFLICT, 'This user is already an active member of this workspace!')
       }
-      await invitationModel.createNewWorkspaceInvitation(invitationData)
-    } catch (invError) {
-      // Không throw nếu invitation lưu lỗi — member đã được thêm thành công
-      console.error('Warning: Failed to create invitation record:', invError.message)
+      if (existingMember.status === 'pending') {
+        throw new ApiError(StatusCodes.CONFLICT, 'An invitation has already been sent to this email!')
+      }
     }
 
-    return updatedWorkspace
+    // 2. Tạo Token độc nhất
+    const inviteToken = crypto.randomBytes(32).toString('hex')
+
+    // 3. Chuẩn bị pending member data
+    const memberRole = role || WORKSPACE_ROLES.MEMBER
+    
+    // Lấy user object nếu user đã có tài khoản (để có thể gắn userId ngay nếu muốn, nhưng ở đây theo AI suggest, có thể set null)
+    // Nhưng tối ưu hơn: nếu có user, gắn userId luôn, chỉ để status pending.
+    const existingUser = await userModel.findOneByEmail(inviteeEmail)
+    const newPendingUserId = existingUser ? existingUser._id : null
+    
+    const db = GET_DB()
+    const newPendingMember = {
+      userId: newPendingUserId,
+      email: inviteeEmail,
+      role: memberRole,
+      status: 'pending',
+      inviteToken: inviteToken,
+      joinedAt: Date.now()
+    }
+
+    // 4. Nhét vào database
+    await db.collection(workspaceModel.WORKSPACE_COLLECTION_NAME).updateOne(
+      { _id: new ObjectId(workspaceId) },
+      { $push: { members: newPendingMember } }
+    )
+
+    // 5. BẮN EMAIL BẰNG BREVO
+    const inviteLink = `${env.WEBSITE_DOMAIN}/accept-invite?token=${inviteToken}&workspaceId=${workspaceId}`
+    const subject = `You are invited to join the Workspace: ${workspace.title}`
+    const htmlContent = `
+      <h3>Hello,</h3>
+      <p>You have been invited to join the workspace <strong>${workspace.title}</strong> on Whip.</p>
+      <p>Click the link below to accept the invitation:</p>
+      <a href="${inviteLink}" style="display:inline-block;padding:10px 20px;background-color:#238636;color:#fff;text-decoration:none;border-radius:4px;">Accept Invitation</a>
+      <p>If you don't have an account, you will need to create one first.</p>
+    `
+    
+    try {
+      await brevoProvider.sendEmail(inviteeEmail, subject, htmlContent)
+    } catch (error) {
+      console.error('Lỗi khi gửi email mời qua Brevo:', error)
+      // Optional: rollback if email fails, but usually we just warn.
+    }
+
+    return { message: 'Invitation sent successfully!', newMember: newPendingMember }
+  } catch (error) {
+    throw error
+  }
+}
+
+/**
+ * Accept invite
+ */
+const acceptInvite = async (userId, userEmail, token, workspaceId) => {
+  try {
+    const workspace = await workspaceModel.findById(workspaceId)
+    if (!workspace) throw new ApiError(StatusCodes.NOT_FOUND, 'Workspace not found!')
+
+    const pendingMember = workspace.members.find(m => m.inviteToken === token)
+    if (!pendingMember) {
+      throw new ApiError(StatusCodes.NOT_FOUND, 'Invalid or expired invitation token!')
+    }
+
+    // Đảm bảo đúng người nhận email mới được accept
+    if (pendingMember.email !== userEmail) {
+      throw new ApiError(StatusCodes.FORBIDDEN, 'This invitation is not for your email address!')
+    }
+
+    // Accept (cập nhật status active, xóa token, gán userId)
+    await workspaceModel.acceptInviteMember(workspaceId, token, userId)
+
+    return { message: 'Invitation accepted successfully!', workspaceId }
   } catch (error) {
     throw error
   }
@@ -165,11 +213,14 @@ const removeMember = async (actorUserId, workspaceId, targetUserId) => {
     }
 
     // Tìm role của actor (người bấm kick)
-    const actorMember = workspace.members.find(m => m.userId.toString() === actorUserId.toString())
+    const actorMember = workspace.members.find(m => m.userId && m.userId.toString() === actorUserId.toString())
     const actorRole = actorMember?.role
 
-    // Tìm role của target (người bị kick)
-    const targetMember = workspace.members.find(m => m.userId.toString() === targetUserId.toString())
+    // Tìm role của target (người bị kick), vì có thể pending nên xóa bằng userId hoặc email
+    const targetMember = workspace.members.find(m => 
+      (m.userId && m.userId.toString() === targetUserId.toString()) || 
+      (m.email === targetUserId)
+    )
     if (!targetMember) {
       throw new ApiError(StatusCodes.NOT_FOUND, 'Target user is not a member of this workspace!')
     }
@@ -185,11 +236,13 @@ const removeMember = async (actorUserId, workspaceId, targetUserId) => {
       throw new ApiError(StatusCodes.FORBIDDEN, 'Admins cannot remove other admins. Only the owner can do this.')
     }
 
-    // Xóa member khỏi workspace
+    // Xóa member khỏi workspace (dùng targetUserId, nếu truyền email thì xoá bằng email)
     const updatedWorkspace = await workspaceModel.removeMember(workspaceId, targetUserId)
 
-    // CASCADE: Gỡ user khỏi tất cả boards trong workspace
-    await cascadeRemoveUserFromBoards(workspaceId, targetUserId)
+    // CASCADE: Gỡ user khỏi tất cả boards trong workspace (Chỉ cần làm nếu user đã có tài khoản thực sự)
+    if (targetMember.userId) {
+      await cascadeRemoveUserFromBoards(workspaceId, targetMember.userId.toString())
+    }
 
     return updatedWorkspace
   } catch (error) {
@@ -218,10 +271,10 @@ const updateMemberRole = async (actorUserId, workspaceId, targetUserId, newRole)
       throw new ApiError(StatusCodes.NOT_FOUND, 'Workspace not found!')
     }
 
-    const actorMember = workspace.members.find(m => m.userId.toString() === actorUserId.toString())
+    const actorMember = workspace.members.find(m => m.userId && m.userId.toString() === actorUserId.toString())
     const actorRole = actorMember?.role
 
-    const targetMember = workspace.members.find(m => m.userId.toString() === targetUserId.toString())
+    const targetMember = workspace.members.find(m => m.userId && m.userId.toString() === targetUserId.toString())
     if (!targetMember) {
       throw new ApiError(StatusCodes.NOT_FOUND, 'Target user is not a member of this workspace!')
     }
@@ -258,7 +311,7 @@ const leaveWorkspace = async (userId, workspaceId) => {
       throw new ApiError(StatusCodes.NOT_FOUND, 'Workspace not found!')
     }
 
-    const memberInfo = workspace.members.find(m => m.userId.toString() === userId.toString())
+    const memberInfo = workspace.members.find(m => m.userId && m.userId.toString() === userId.toString())
     if (!memberInfo) {
       throw new ApiError(StatusCodes.NOT_FOUND, 'You are not a member of this workspace!')
     }
@@ -335,6 +388,7 @@ export const workspaceService = {
   deleteItem,
   update,
   inviteMember,
+  acceptInvite,
   removeMember,
   updateMemberRole,
   leaveWorkspace,
