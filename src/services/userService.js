@@ -20,12 +20,17 @@ const createNew = async (reqBody) => {
     // tạo data để lưu vào db
     // phần trước dấu @ là tên của người dùng. vd: phanbao@gmail.com -> nameFromEmail = phanbao
     const nameFromEmail = reqBody.email.split('@')[0] 
+    
+    // Gắn avatar mặc định từ ui-avatars.com
+    const defaultAvatar = `https://ui-avatars.com/api/?name=${encodeURIComponent(nameFromEmail)}&background=random&color=fff`
+
     const newUser = {
       email: reqBody.email,
       password: bcryptjs.hashSync(reqBody.password, 8), // mã hóa password
       username: nameFromEmail,
       // sẽ hiện thị ra tên người dùng (ví dụ: khi đăng ký tài khoản phanbao@gmail.com thì hiển thị username là phanbao và displayName là phanbao)
       displayName: nameFromEmail, 
+      avatar: defaultAvatar, // Thêm avatar
       verifyToken: uuidv4(), // tạo mã token xác thực
     }
 
@@ -98,7 +103,9 @@ const login = async (reqBody) => {
     // tạo thông tin sẽ đính kèm trong JWT Token bao gồm _id và email của user
     const userInfo = {
       _id: existUser._id,
-      email: existUser.email
+      email: existUser.email,
+      avatar: existUser.avatar,
+      displayName: existUser.displayName
     }
 
     // Tạo ra 2 loại token, accessToken và refreshToken để trả về cho phía FE
@@ -128,7 +135,9 @@ const refreshToken = async (clientRefreshToken) => {
     // Đoạn này vì chúng ta chỉ lưu những thông tin unique và cố định của user trong token rồi, vì vậy có thể lấy luôn từ decoded ra, tiết kiệm query vào DB để lấy data mới.
     const userInfo = {
       _id: refreshTokenDecoded._id,
-      email: refreshTokenDecoded.email
+      email: refreshTokenDecoded.email,
+      avatar: refreshTokenDecoded.avatar,
+      displayName: refreshTokenDecoded.displayName
     }
 
     // Tạo accessToken mới
@@ -184,7 +193,12 @@ const update = async (userId, reqBody, userAvatarFile) => {
  * Helper function dùng chung: tạo tokens cho OAuth user
  */
 const _generateTokensForOAuthUser = async (user) => {
-  const userInfo = { _id: user._id, email: user.email }
+  const userInfo = { 
+    _id: user._id, 
+    email: user.email,
+    avatar: user.avatar,
+    displayName: user.displayName
+  }
 
   const accessToken = await jwtProvider.generateToken(
     userInfo,

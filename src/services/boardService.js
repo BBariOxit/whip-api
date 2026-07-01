@@ -5,6 +5,7 @@ import { columnModel } from '~/models/columnModel'
 import { cardModel } from '~/models/cardModel'
 import { labelModel } from '~/models/labelModel'
 import { GET_DB } from '~/config/mongodb'
+import { userModel } from '~/models/userModel'
 import ApiError from '~/utils/ApiError'
 import { StatusCodes } from 'http-status-codes'
 import { OBJECT_ID_RULE } from '~/utils/validators'
@@ -389,6 +390,36 @@ const getArchivedItems = async (boardId) => {
   }
 }
 
+const joinBoard = async (userId, boardId) => {
+  try {
+    const board = await boardModel.findOneById(boardId)
+    if (!board) throw new ApiError(StatusCodes.NOT_FOUND, 'Board not found!')
+
+    if (board.type === 'private') {
+      throw new ApiError(StatusCodes.FORBIDDEN, 'Cannot join a private board!')
+    }
+
+    const isAlreadyJoined = board.memberIds?.some(id => id.toString() === userId.toString())
+    const isOwner = board.ownerIds?.some(id => id.toString() === userId.toString())
+    
+    if (isAlreadyJoined || isOwner) {
+      throw new ApiError(StatusCodes.BAD_REQUEST, 'You are already a member of this board!')
+    }
+
+    await boardModel.pushMemberIds(boardId, userId)
+    
+    const newMember = await userModel.findOneById(userId)
+    
+    return {
+      _id: newMember._id,
+      email: newMember.email,
+      username: newMember.username,
+      displayName: newMember.displayName,
+      avatar: newMember.avatar
+    }
+  } catch (error) { throw error }
+}
+
 export const boardService = {
   createNew,
   getDetails,
@@ -400,5 +431,6 @@ export const boardService = {
   cloneTemplate,
   deleteItem,
   bulkDeleteItems,
-  getArchivedItems
+  getArchivedItems,
+  joinBoard
 }

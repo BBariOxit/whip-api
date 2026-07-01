@@ -167,6 +167,18 @@ const getColumnTemplates = async (req, res, next) => {
   }
 }
 
+const joinBoard = async (req, res, next) => {
+  try {
+    const userId = req.jwtDecoded._id
+    const boardId = req.params.id
+
+    const newMember = await boardService.joinBoard(userId, boardId)
+    res.status(StatusCodes.OK).json({ message: 'Joined successfully!', newMember })
+  } catch (error) {
+    next(error)
+  }
+}
+
 export const boardController = {
   createNew,
   getDetails,
@@ -180,5 +192,6 @@ export const boardController = {
   bulkDeleteItems,
   getArchivedItems,
   getCardTemplates,
-  getColumnTemplates
+  getColumnTemplates,
+  joinBoard
 }
