@@ -240,9 +240,11 @@ const removeMember = async (actorUserId, workspaceId, targetUserId) => {
     // Xóa member khỏi workspace (dùng targetUserId, nếu truyền email thì xoá bằng email)
     const updatedWorkspace = await workspaceModel.removeMember(workspaceId, targetUserId)
 
+    const workspaceOwner = workspace.members.find(m => m.role === WORKSPACE_ROLES.OWNER)
+
     // CASCADE: Gỡ user khỏi tất cả boards trong workspace (Chỉ cần làm nếu user đã có tài khoản thực sự)
-    if (targetMember.userId) {
-      await cascadeRemoveUserFromBoards(workspaceId, targetMember.userId.toString())
+    if (targetMember.userId && workspaceOwner && workspaceOwner.userId) {
+      await cascadeRemoveUserFromBoards(workspaceId, targetMember.userId.toString(), workspaceOwner.userId.toString())
     }
 
     return updatedWorkspace
@@ -331,8 +333,12 @@ const leaveWorkspace = async (userId, workspaceId) => {
     // Xóa member khỏi workspace
     const updatedWorkspace = await workspaceModel.removeMember(workspaceId, userId)
 
+    const workspaceOwner = workspace.members.find(m => m.role === WORKSPACE_ROLES.OWNER)
+
     // CASCADE: Gỡ user khỏi tất cả boards trong workspace
-    await cascadeRemoveUserFromBoards(workspaceId, userId)
+    if (workspaceOwner && workspaceOwner.userId) {
+      await cascadeRemoveUserFromBoards(workspaceId, userId, workspaceOwner.userId.toString())
+    }
 
     return updatedWorkspace
   } catch (error) {
@@ -359,26 +365,41 @@ const getMembers = async (workspaceId) => {
  * CASCADE: Gỡ user khỏi tất cả boards thuộc workspace
  * Được gọi khi kick member hoặc member leave workspace
  */
-const cascadeRemoveUserFromBoards = async (workspaceId, userId) => {
+const cascadeRemoveUserFromBoards = async (workspaceId, userId, workspaceOwnerId) => {
   try {
     const db = GET_DB()
     const userObjectId = new ObjectId(userId)
+    const ownerObjectId = new ObjectId(workspaceOwnerId)
+    const boardCollection = db.collection(boardModel.BOARD_COLLECTION_NAME)
 
-    // Tìm tất cả boards thuộc workspace này
-    const boards = await boardModel.findByWorkspaceId(workspaceId)
+    // 1. Đối với các board mà user bị xóa/rời đi ĐANG LÀ OWNER:
+    // Gỡ user khỏi ownerIds và NHÉT workspaceOwner vào làm owner thay thế
+    const ownedBoards = await boardCollection.find({ 
+      workspaceId: new ObjectId(workspaceId),
+      ownerIds: userObjectId 
+    }).toArray()
 
-    for (const board of boards) {
-      // Gỡ user khỏi ownerIds
-      await db.collection(boardModel.BOARD_COLLECTION_NAME).updateOne(
+    for (const board of ownedBoards) {
+      await boardCollection.updateOne(
         { _id: board._id },
-        { $pull: { ownerIds: userObjectId } }
-      )
-      // Gỡ user khỏi memberIds
-      await db.collection(boardModel.BOARD_COLLECTION_NAME).updateOne(
-        { _id: board._id },
-        { $pull: { memberIds: userObjectId } }
+        { 
+          $pull: { ownerIds: userObjectId },
+          $addToSet: { ownerIds: ownerObjectId, memberIds: ownerObjectId }
+        }
       )
     }
+
+    // 2. Gỡ user khỏi memberIds VÀ ownerIds trên TOÀN BỘ boards thuộc workspace này
+    // (Làm thêm bước ownerIds để chắc chắn không sót)
+    await boardCollection.updateMany(
+      { workspaceId: new ObjectId(workspaceId) },
+      { 
+        $pull: { 
+          memberIds: userObjectId,
+          ownerIds: userObjectId 
+        } 
+      }
+    )
   } catch (error) {
     console.error('Error in cascadeRemoveUserFromBoards:', error.message)
     // Không throw — cascade failure không nên block main operation
