@@ -43,4 +43,7 @@ Router.route('/:id/join')
 Router.route('/supports/moving_card')
   .put(authMiddleware.isAuthorized, requireBoardRole(['admin', 'member']), boardValidation.moveCardifferentColumn, boardController.moveCardifferentColumn)
 
+Router.route('/:id/leave')
+  .post(authMiddleware.isAuthorized, boardController.leaveBoard)
+
 export const boardRouter = Router

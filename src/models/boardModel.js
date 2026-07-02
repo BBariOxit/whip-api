@@ -426,6 +426,19 @@ const deleteOneById = async (boardId) => {
   }
 }
 
+const pullMemberIds = async (boardId, userId) => {
+  try {
+    const result = await GET_DB().collection(BOARD_COLLECTION_NAME).findOneAndUpdate(
+      { _id: new ObjectId(boardId) },
+      { $pull: { memberIds: new ObjectId(userId) } },
+      { returnDocument: 'after' }
+    )
+    return result
+  } catch (error) {
+    throw new Error(error)
+  }
+}
+
 const findByWorkspaceId = async (workspaceId) => {
   try {
     const results = await GET_DB().collection(BOARD_COLLECTION_NAME).find({
@@ -455,5 +468,6 @@ export const boardModel = {
   updateCustomField,
   pullCustomField,
   deleteOneById,
-  findByWorkspaceId
+  findByWorkspaceId,
+  pullMemberIds
 }

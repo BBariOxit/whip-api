@@ -420,6 +420,33 @@ const joinBoard = async (userId, boardId) => {
   } catch (error) { throw error }
 }
 
+const leaveBoard = async (userId, boardId) => {
+  try {
+    const board = await boardModel.findOneById(boardId)
+    if (!board) {
+      throw new ApiError(StatusCodes.NOT_FOUND, 'Board not found!')
+    }
+
+    const isMember = board.memberIds?.some(id => id.toString() === userId.toString())
+    if (!isMember) {
+      throw new ApiError(StatusCodes.NOT_FOUND, 'You are not a member of this board!')
+    }
+
+    const isOwner = board.ownerIds?.some(id => id.toString() === userId.toString())
+    if (isOwner) {
+      throw new ApiError(
+        StatusCodes.BAD_REQUEST,
+        'The board owner cannot leave. Transfer ownership first or delete the board.'
+      )
+    }
+
+    const result = await boardModel.pullMemberIds(boardId, userId)
+    return result
+  } catch (error) {
+    throw error
+  }
+}
+
 export const boardService = {
   createNew,
   getDetails,
@@ -432,5 +459,6 @@ export const boardService = {
   deleteItem,
   bulkDeleteItems,
   getArchivedItems,
-  joinBoard
+  joinBoard,
+  leaveBoard
 }
