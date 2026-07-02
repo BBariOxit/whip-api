@@ -36,8 +36,14 @@ Router.route('/:id')
 Router.route('/:id/visibility')
   .put(authMiddleware.isAuthorized, requireBoardAdmin, boardController.updateVisibility)
 
+Router.route('/:id/join')
+  .post(authMiddleware.isAuthorized, boardController.joinBoard)
+
 // API hỗ trợ việc di chuyển card giữa các column khác nhau trong 1 board
 Router.route('/supports/moving_card')
   .put(authMiddleware.isAuthorized, requireBoardRole(['admin', 'member']), boardValidation.moveCardifferentColumn, boardController.moveCardifferentColumn)
+
+Router.route('/:id/leave')
+  .post(authMiddleware.isAuthorized, boardController.leaveBoard)
 
 export const boardRouter = Router

@@ -263,17 +263,37 @@ const getBoards = async (userId, page, itemsPerPage, queryFilters) => {
 
     // Điều kiện 03: Phân quyền xem Board
     if (queryFilters && queryFilters.workspaceId && queryFilters.workspaceId !== 'null') {
-      queryConditions.push({ workspaceId: new ObjectId(queryFilters.workspaceId) })
-      // Nếu đang xem trong 1 workspace cụ thể -> được xem board workspace_visible, public, HOẶC là member/owner của private board
-      queryConditions.push({
-        $or: [
-          { type: BOARD_TYPES.WORKSPACE_VISIBLE },
-          { type: BOARD_TYPES.PUBLIC },
-          { ownerIds: { $all: [new ObjectId(userId)] } },
-          { memberIds: { $all: [new ObjectId(userId)] } }
-        ]
-      })
-      delete queryFilters.workspaceId // Xóa để không bị duyệt lại ở vòng lặp filter dưới
+      if (queryFilters.workspaceId === 'guest') {
+        const db = GET_DB()
+        const myWorkspaces = await db.collection('workspaces').find({
+          'members.userId': new ObjectId(userId)
+        }).toArray()
+        
+        const myWorkspaceIds = myWorkspaces.map(ws => ws._id)
+
+        queryConditions.push({ workspaceId: { $ne: null } })
+        queryConditions.push({ workspaceId: { $nin: myWorkspaceIds } })
+        
+        queryConditions.push({
+          $or: [
+            { ownerIds: { $all: [new ObjectId(userId)] } },
+            { memberIds: { $all: [new ObjectId(userId)] } }
+          ]
+        })
+        delete queryFilters.workspaceId
+      } else {
+        queryConditions.push({ workspaceId: new ObjectId(queryFilters.workspaceId) })
+        // Nếu đang xem trong 1 workspace cụ thể -> được xem board workspace_visible, public, HOẶC là member/owner của private board
+        queryConditions.push({
+          $or: [
+            { type: BOARD_TYPES.WORKSPACE_VISIBLE },
+            { type: BOARD_TYPES.PUBLIC },
+            { ownerIds: { $all: [new ObjectId(userId)] } },
+            { memberIds: { $all: [new ObjectId(userId)] } }
+          ]
+        })
+        delete queryFilters.workspaceId // Xóa để không bị duyệt lại ở vòng lặp filter dưới
+      }
     } else {
       // Nếu đang xem ở ngoài (Personal boards) -> Bắt buộc phải là owner hoặc member
       queryConditions.push({
@@ -406,6 +426,19 @@ const deleteOneById = async (boardId) => {
   }
 }
 
+const pullMemberIds = async (boardId, userId) => {
+  try {
+    const result = await GET_DB().collection(BOARD_COLLECTION_NAME).findOneAndUpdate(
+      { _id: new ObjectId(boardId) },
+      { $pull: { memberIds: new ObjectId(userId) } },
+      { returnDocument: 'after' }
+    )
+    return result
+  } catch (error) {
+    throw new Error(error)
+  }
+}
+
 const findByWorkspaceId = async (workspaceId) => {
   try {
     const results = await GET_DB().collection(BOARD_COLLECTION_NAME).find({
@@ -435,5 +468,6 @@ export const boardModel = {
   updateCustomField,
   pullCustomField,
   deleteOneById,
-  findByWorkspaceId
+  findByWorkspaceId,
+  pullMemberIds
 }
