@@ -19,6 +19,10 @@ Router.route('/templates/clone')
 Router.route('/bulk-delete')
   .delete(authMiddleware.isAuthorized, boardController.bulkDeleteItems)
 
+// Lưu ý: phải khai báo TRƯỚC route '/:id' để Express không match '/starred' thành param :id
+Router.route('/starred')
+  .get(authMiddleware.isAuthorized, boardController.getStarredBoards)
+
 Router.route('/:id/archived-items')
   .get(authMiddleware.isAuthorized, requireBoardRole(['admin', 'member']), boardController.getArchivedItems)
 
@@ -35,6 +39,10 @@ Router.route('/:id')
 
 Router.route('/:id/visibility')
   .put(authMiddleware.isAuthorized, requireBoardAdmin, boardController.updateVisibility)
+
+// Gắn/gỡ sao board (toggle). Chỉ cần đăng nhập; phân quyền xem board được check ở tầng service.
+Router.route('/:id/star')
+  .put(authMiddleware.isAuthorized, boardController.toggleStarred)
 
 Router.route('/:id/join')
   .post(authMiddleware.isAuthorized, boardController.joinBoard)
