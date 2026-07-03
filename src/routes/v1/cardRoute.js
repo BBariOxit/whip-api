@@ -14,8 +14,10 @@ Router.route('/')
 Router.route('/use-template')
   .post(authMiddleware.isAuthorized, requireBoardRole(['admin', 'member']), cardController.useTemplate)
 
+// Duplicate/paste card: liên quan card nguồn + column đích (có thể khác board) nên quyền được kiểm
+// trong service (ghi vào board đích cần member/admin, copy từ board khác cần quyền xem board nguồn)
 Router.route('/duplicate')
-  .post(authMiddleware.isAuthorized, requireBoardRole(['admin', 'member']), cardValidation.duplicate, cardController.duplicateCard)
+  .post(authMiddleware.isAuthorized, cardValidation.duplicate, cardController.duplicateCard)
 
 Router.route('/templates/:id')
   .delete(authMiddleware.isAuthorized, requireBoardRole(['admin', 'member']), cardController.deleteTemplate)

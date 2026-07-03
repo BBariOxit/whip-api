@@ -1,10 +1,14 @@
+import { StatusCodes } from 'http-status-codes'
 import { cardModel } from '~/models/cardModel'
 import { columnModel } from '~/models/columnModel'
+import { boardModel } from '~/models/boardModel'
 import { cloudinaryProvider } from '~/providers/CloudinaryProvider'
 import { activityModel } from '~/models/activityModel'
 import { labelModel } from '~/models/labelModel'
 import { userModel } from '~/models/userModel'
 import { CARD_MEMBER_ACTIONS, ACTIVITY_ACTION_TYPES } from '~/utils/constants'
+import ApiError from '~/utils/ApiError'
+import { getBoardAccessRole } from '~/middlewares/rbacMiddleware'
 
 // Helper: Ghi log activity vào DB (không throw error nếu fail để không block luồng chính)
 const logActivity = async (data) => {
@@ -365,8 +369,34 @@ const deleteTemplate = async (templateId) => {
   }
 }
 
-const duplicateCard = async (cardId, targetColumnId) => {
+const duplicateCard = async (cardId, targetColumnId, userId) => {
   try {
+    const [sourceCard, targetColumn] = await Promise.all([
+      cardModel.findOneById(cardId),
+      columnModel.findOneById(targetColumnId)
+    ])
+    if (!sourceCard || !targetColumn) {
+      throw new ApiError(StatusCodes.NOT_FOUND, 'Source card or target column not found!')
+    }
+
+    // 👑 Quyền GHI vào board đích: bắt buộc admin/member (viewer/người ngoài không được tạo card)
+    const targetBoard = await boardModel.findOneById(targetColumn.boardId)
+    if (!targetBoard) throw new ApiError(StatusCodes.NOT_FOUND, 'Target board not found!')
+    const targetRole = await getBoardAccessRole(targetBoard, userId)
+    if (targetRole !== 'admin' && targetRole !== 'member') {
+      throw new ApiError(StatusCodes.FORBIDDEN, 'You do not have permission to add cards to this board!')
+    }
+
+    // 👑 Chống IDOR/lộ dữ liệu: nếu copy từ board KHÁC thì phải có quyền xem board nguồn.
+    // (Ngăn kẻ tấn công là member board B copy trộm nội dung card private của board A về board mình)
+    if (sourceCard.boardId.toString() !== targetColumn.boardId.toString()) {
+      const sourceBoard = await boardModel.findOneById(sourceCard.boardId)
+      const sourceRole = sourceBoard ? await getBoardAccessRole(sourceBoard, userId) : 'none'
+      if (sourceRole === 'none') {
+        throw new ApiError(StatusCodes.FORBIDDEN, 'You do not have access to the source card!')
+      }
+    }
+
     const newCard = await cardModel.duplicateCard(cardId, targetColumnId)
 
     // Cập nhật mảng cardOrderIds của Column đích

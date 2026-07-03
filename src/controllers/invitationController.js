@@ -7,6 +7,13 @@ const createNewBoardInvitation = async (req, res, next) => {
     const inviterId = req.jwtDecoded._id
     const resInvitation = await invitationService.createNewBoardInvitation(req.body, inviterId)
 
+    // Emit realtime tới ĐÚNG người được mời (room riêng của user). Server-authoritative:
+    // không broadcast lộ lời mời cho mọi client, và client không thể tự giả mạo lời mời.
+    const io = req.app.get('socketio')
+    if (io && resInvitation?.inviteeId) {
+      io.to(`user:${resInvitation.inviteeId}`).emit('BE_USER_INVITED_TO_BOARD', resInvitation)
+    }
+
     res.status(StatusCodes.CREATED).json(resInvitation)
   } catch (error) {
     next(error)

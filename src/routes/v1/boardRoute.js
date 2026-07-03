@@ -49,9 +49,10 @@ Router.route('/:id/star')
 Router.route('/:id/join')
   .post(authMiddleware.isAuthorized, boardController.joinBoard)
 
-// API hỗ trợ việc di chuyển card giữa các column khác nhau trong 1 board
+// API hỗ trợ việc di chuyển card giữa các column khác nhau trong 1 board.
+// Quyền + kiểm tra card/2 column cùng board được xử lý trong service (boardId suy từ card, không nhận từ client).
 Router.route('/supports/moving_card')
-  .put(authMiddleware.isAuthorized, requireBoardRole(['admin', 'member']), boardValidation.moveCardifferentColumn, boardController.moveCardifferentColumn)
+  .put(authMiddleware.isAuthorized, boardValidation.moveCardifferentColumn, boardController.moveCardifferentColumn)
 
 Router.route('/:id/leave')
   .post(authMiddleware.isAuthorized, boardController.leaveBoard)

@@ -11,6 +11,7 @@ import { StatusCodes } from 'http-status-codes'
 import { OBJECT_ID_RULE } from '~/utils/validators'
 import { DEFAULT_PAGE, DEFAULT_ITEMS_PER_PAGE } from '~/utils/constants'
 import { ObjectId } from 'mongodb'
+import { getBoardAccessRole } from '~/middlewares/rbacMiddleware'
 
 const createNew = async (userId, reqBody) => {
   try {
@@ -123,8 +124,31 @@ const updateVisibility = async (userId, boardId, type) => {
   }
 }
 
-const moveCardifferentColumn = async (reqBody) => {
+const moveCardifferentColumn = async (reqBody, userId) => {
   try {
+    // Lấy card + 2 column liên quan để validate & phân quyền (không tin boardId từ client)
+    const [card, prevColumn, nextColumn] = await Promise.all([
+      cardModel.findOneById(reqBody.currCardId),
+      columnModel.findOneById(reqBody.prevColumnId),
+      columnModel.findOneById(reqBody.nextColumnId)
+    ])
+    if (!card || !prevColumn || !nextColumn) {
+      throw new ApiError(StatusCodes.NOT_FOUND, 'Card or column not found!')
+    }
+
+    // 👑 Chống IDOR: card và cả 2 column bắt buộc cùng thuộc 1 board
+    const boardId = card.boardId.toString()
+    if (prevColumn.boardId.toString() !== boardId || nextColumn.boardId.toString() !== boardId) {
+      throw new ApiError(StatusCodes.BAD_REQUEST, 'Card and columns must belong to the same board!')
+    }
+
+    // 👑 Phân quyền: chỉ admin/member của board mới được di chuyển card (chặn viewer & người ngoài)
+    const board = await boardModel.findOneById(boardId)
+    const role = board ? await getBoardAccessRole(board, userId) : 'none'
+    if (role !== 'admin' && role !== 'member') {
+      throw new ApiError(StatusCodes.FORBIDDEN, 'You do not have permission to move cards on this board!')
+    }
+
     // B1: Cập nhật mảng cardOrderIds của Column ban đầu chứa nó (bản chất là xóa cái _id của Card ra khỏi mảng cũ)
     await columnModel.update(reqBody.prevColumnId, {
       cardOrderIds: reqBody.prevCardOrderIds,

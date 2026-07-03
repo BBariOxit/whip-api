@@ -65,7 +65,8 @@ const updateVisibility = async (req, res, next) => {
 
 const moveCardifferentColumn = async (req, res, next) => {
   try {
-    const result = await boardService.moveCardifferentColumn(req.body)
+    const userId = req.jwtDecoded._id
+    const result = await boardService.moveCardifferentColumn(req.body, userId)
 
     res.status(StatusCodes.OK).json(result)
   } catch (error) {
