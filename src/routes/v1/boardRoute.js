@@ -13,8 +13,10 @@ Router.route('/')
 Router.route('/templates')
   .get(authMiddleware.isAuthorized, boardController.getTemplates)
 
+// Clone 1 board template thành board mới của chính user (personal + user làm owner).
+// Chỉ cần đăng nhập: board mới luôn thuộc về người gọi, và service chặn clone thứ không phải template.
 Router.route('/templates/clone')
-  .post(authMiddleware.isAuthorized, boardController.cloneTemplate)
+  .post(authMiddleware.isAuthorized, boardValidation.cloneTemplate, boardController.cloneTemplate)
 
 Router.route('/bulk-delete')
   .delete(authMiddleware.isAuthorized, boardController.bulkDeleteItems)

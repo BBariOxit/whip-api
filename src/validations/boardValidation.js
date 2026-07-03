@@ -74,6 +74,21 @@ const update = async (req, res, next) => {
   }
 }
 
+const cloneTemplate = async (req, res, next) => {
+  const correctCondition = Joi.object({
+    templateBoardId: Joi.string().required().pattern(OBJECT_ID_RULE).message(OBJECT_ID_RULE_MESSAGE)
+  })
+
+  try {
+    await correctCondition.validateAsync(req.body, { abortEarly: false })
+    next()
+  } catch (error) {
+    const errorMessage = new Error(error).message
+    const customError = new ApiError(StatusCodes.UNPROCESSABLE_ENTITY, errorMessage)
+    next(customError)
+  }
+}
+
 const moveCardifferentColumn = async (req, res, next) => {
   const correctCondition = Joi.object({
     currCardId: Joi.string().required().pattern(OBJECT_ID_RULE).message(OBJECT_ID_RULE_MESSAGE),
@@ -105,5 +120,6 @@ const moveCardifferentColumn = async (req, res, next) => {
 export const boardValidation = {
   createNew,
   update,
+  cloneTemplate,
   moveCardifferentColumn
 }

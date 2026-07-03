@@ -238,13 +238,12 @@ const getTemplates = async () => {
 
 const cloneTemplate = async (userId, templateBoardId) => {
   try {
-    // 1. Get template board details (includes its columns and cards)
-    // using user ID null because template doesn't belong to any user, but getDetails checks owners/members. 
-    // Wait, getDetails checks owners/members! So getDetails will fail for a template board with a normal userId.
-    // Let's create a specific fetch or modify getDetails. Actually, template boards have empty ownerIds.
-    // We might need to just find it using findOneById, then fetch columns.
+    // 1. Lấy board template gốc.
+    // 👑 Bảo mật: chỉ chấp nhận board thực sự là template và chưa bị xoá mềm.
+    // Nhờ điều kiện isTemplate này, user KHÔNG thể lợi dụng endpoint để clone (đọc trộm) một
+    // board private bất kỳ bằng cách truyền id của nó vào — vì board thường không có isTemplate=true.
     const templateBoard = await boardModel.findOneById(templateBoardId)
-    if (!templateBoard || !templateBoard.isTemplate) {
+    if (!templateBoard || !templateBoard.isTemplate || templateBoard._destroy) {
       throw new ApiError(StatusCodes.NOT_FOUND, 'Template not found!')
     }
 
@@ -263,13 +262,15 @@ const cloneTemplate = async (userId, templateBoardId) => {
       boardId: templateBoard._id
     }).toArray()
 
-    // 2. Create new board based on template
+    // 2. Tạo board mới từ template.
+    // Cố tình KHÔNG gán workspaceId => board thuộc "Personal Boards" của user.
+    // boardModel.createNew sẽ tự set ownerIds = [userId] => người clone chính là chủ board.
     const newTitle = `${templateBoard.title} (Bản sao)`
     const newBoardData = {
       title: newTitle,
       slug: slugify(newTitle),
       description: templateBoard.description,
-      type: 'private', // User's cloned board might be private by default
+      type: 'private', // Board mới mặc định private, chỉ mình chủ board thấy
       background: templateBoard.background,
       isTemplate: false
     }
