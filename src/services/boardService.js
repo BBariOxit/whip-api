@@ -447,6 +447,47 @@ const leaveBoard = async (userId, boardId) => {
   }
 }
 
+const getStarredBoards = async (userId) => {
+  try {
+    const results = await boardModel.getStarredBoards(userId)
+    return results
+  } catch (error) {
+    throw error
+  }
+}
+
+const toggleStarred = async (userId, boardId) => {
+  try {
+    if (!OBJECT_ID_RULE.test(boardId)) {
+      throw new ApiError(StatusCodes.BAD_REQUEST, 'Invalid board id')
+    }
+
+    const board = await boardModel.findOneById(boardId)
+    if (!board || board._destroy) {
+      throw new ApiError(StatusCodes.NOT_FOUND, 'Board not found!')
+    }
+
+    // 👑 Chốt chặn bảo mật: không cho user gắn sao một board private mà họ không thuộc về.
+    // (Cùng nguyên tắc gatekeeper như getDetails ở trên)
+    const isOwner = board.ownerIds?.some(id => id.toString() === userId)
+    const isMember = board.memberIds?.some(id => id.toString() === userId)
+    if (board.type === 'private' && !isOwner && !isMember) {
+      throw new ApiError(StatusCodes.FORBIDDEN, 'Access denied. You cannot star a private board you do not belong to.')
+    }
+
+    // Toggle: đang có sao thì gỡ, chưa có thì thêm
+    const isStarred = board.starredBy?.some(id => id.toString() === userId)
+    if (isStarred) {
+      await boardModel.unstarBoard(boardId, userId)
+      return { boardId, starred: false }
+    }
+    await boardModel.starBoard(boardId, userId)
+    return { boardId, starred: true }
+  } catch (error) {
+    throw error
+  }
+}
+
 export const boardService = {
   createNew,
   getDetails,
@@ -460,5 +501,7 @@ export const boardService = {
   bulkDeleteItems,
   getArchivedItems,
   joinBoard,
-  leaveBoard
+  leaveBoard,
+  getStarredBoards,
+  toggleStarred
 }

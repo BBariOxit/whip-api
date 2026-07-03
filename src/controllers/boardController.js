@@ -191,6 +191,27 @@ const leaveBoard = async (req, res, next) => {
   }
 }
 
+const getStarredBoards = async (req, res, next) => {
+  try {
+    const userId = req.jwtDecoded._id
+    const results = await boardService.getStarredBoards(userId)
+    res.status(StatusCodes.OK).json(results)
+  } catch (error) {
+    next(error)
+  }
+}
+
+const toggleStarred = async (req, res, next) => {
+  try {
+    const userId = req.jwtDecoded._id
+    const boardId = req.params.id
+    const result = await boardService.toggleStarred(userId, boardId)
+    res.status(StatusCodes.OK).json(result)
+  } catch (error) {
+    next(error)
+  }
+}
+
 export const boardController = {
   createNew,
   getDetails,
@@ -206,5 +227,7 @@ export const boardController = {
   getCardTemplates,
   getColumnTemplates,
   joinBoard,
-  leaveBoard
+  leaveBoard,
+  getStarredBoards,
+  toggleStarred
 }

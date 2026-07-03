@@ -36,6 +36,11 @@ const BOARD_COLLECTION_SCHEMA = Joi.object({
     Joi.string().pattern(OBJECT_ID_RULE).message(OBJECT_ID_RULE_MESSAGE)
   ).default([]),
 
+  // Danh sách userId đã gắn sao (star) board này — mỗi user tự quản lý danh sách sao của mình
+  starredBy: Joi.array().items(
+    Joi.string().pattern(OBJECT_ID_RULE).message(OBJECT_ID_RULE_MESSAGE)
+  ).default([]),
+
   columnOrderIds: Joi.array().items(
     Joi.string().pattern(OBJECT_ID_RULE).message(OBJECT_ID_RULE_MESSAGE)
   ).default([]),
@@ -451,6 +456,78 @@ const findByWorkspaceId = async (workspaceId) => {
   }
 }
 
+// Thêm userId vào mảng starredBy ($addToSet để tránh trùng lặp khi gọi nhiều lần)
+const starBoard = async (boardId, userId) => {
+  try {
+    const result = await GET_DB().collection(BOARD_COLLECTION_NAME).findOneAndUpdate(
+      { _id: new ObjectId(boardId) },
+      { $addToSet: { starredBy: new ObjectId(userId) } },
+      { returnDocument: 'after' }
+    )
+    return result
+  } catch (error) {
+    throw new Error(error)
+  }
+}
+
+// Gỡ userId khỏi mảng starredBy
+const unstarBoard = async (boardId, userId) => {
+  try {
+    const result = await GET_DB().collection(BOARD_COLLECTION_NAME).findOneAndUpdate(
+      { _id: new ObjectId(boardId) },
+      { $pull: { starredBy: new ObjectId(userId) } },
+      { returnDocument: 'after' }
+    )
+    return result
+  } catch (error) {
+    throw new Error(error)
+  }
+}
+
+// Lấy danh sách board đã gắn sao của 1 user, kèm tên workspace (dùng $lookup để tránh N+1 query).
+// Chỉ project đúng vài field cần cho dropdown để payload nhẹ nhất có thể.
+const getStarredBoards = async (userId) => {
+  try {
+    const result = await GET_DB().collection(BOARD_COLLECTION_NAME).aggregate([
+      {
+        $match: {
+          starredBy: new ObjectId(userId),
+          _destroy: false,
+          isTemplate: { $ne: true },
+          // Bảo mật: chỉ trả về board user vẫn còn quyền xem. Phòng trường hợp board từng public
+          // (đã được star) sau đó bị đổi thành private mà user không phải owner/member.
+          $or: [
+            { type: { $ne: BOARD_TYPES.PRIVATE } },
+            { ownerIds: new ObjectId(userId) },
+            { memberIds: new ObjectId(userId) }
+          ]
+        }
+      },
+      {
+        $lookup: {
+          from: 'workspaces', // workspaceModel.WORKSPACE_COLLECTION_NAME
+          localField: 'workspaceId',
+          foreignField: '_id',
+          as: 'workspaceInfo'
+        }
+      },
+      {
+        $project: {
+          title: 1,
+          slug: 1,
+          background: 1,
+          // Bóc title của workspace đầu tiên (nếu là personal board thì workspaceInfo rỗng -> null)
+          workspaceName: { $arrayElemAt: ['$workspaceInfo.title', 0] }
+        }
+      },
+      { $sort: { title: 1 } }
+    ], { collation: { locale: 'en' } }).toArray()
+    return result
+  } catch (error) {
+    throw new Error(error)
+  }
+}
+
 export const boardModel = {
   BOARD_COLLECTION_NAME,
   BOARD_COLLECTION_SCHEMA,
@@ -469,5 +546,8 @@ export const boardModel = {
   pullCustomField,
   deleteOneById,
   findByWorkspaceId,
-  pullMemberIds
+  pullMemberIds,
+  starBoard,
+  unstarBoard,
+  getStarredBoards
 }
