@@ -14,8 +14,9 @@ const createNew = async (req, res, next) => {
 
 const duplicateCard = async (req, res, next) => {
   try {
+    const userId = req.jwtDecoded._id
     const { cardId, targetColumnId } = req.body
-    const newCard = await cardService.duplicateCard(cardId, targetColumnId)
+    const newCard = await cardService.duplicateCard(cardId, targetColumnId, userId)
 
     res.status(StatusCodes.CREATED).json(newCard)
   } catch (error) {

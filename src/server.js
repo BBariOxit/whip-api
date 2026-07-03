@@ -12,8 +12,8 @@ import cookieParser from 'cookie-parser'
 // https://socket.io/get-started/chat/#integrating-socketio
 import socketIo from 'socket.io'
 import http from 'http'
-import { inviteUserToBoardSocket } from './sockets/inviteUserToBoardSocket'
 import { cardCommentSocket } from './sockets/cardCommentSocket'
+import { socketAuthMiddleware } from './sockets/socketAuth'
 
 const START_SERVER = () => {
   const app = express()
@@ -43,11 +43,15 @@ const START_SERVER = () => {
   const server = http.createServer(app)
   // khởi tạo biến io với sever và cors
   const io = socketIo(server, { cors: corsOptions })
+  // Xác thực socket qua cookie accessToken -> gắn socket.userId (dùng để phân quyền join room)
+  io.use(socketAuthMiddleware)
   // Lưu io instance vào app để Controller có thể truy cập qua req.app.get('socketio')
   app.set('socketio', io)
   io.on('connection', (socket) => {
-    // gọi các socket
-    inviteUserToBoardSocket(io, socket)
+    // Mỗi user tham gia 1 room riêng "user:<id>" để nhận thông báo cá nhân (vd lời mời vào board)
+    // được emit server-authoritative từ controller, thay vì broadcast cho tất cả.
+    if (socket.userId) socket.join(`user:${socket.userId}`)
+
     cardCommentSocket(io, socket)
   })
 

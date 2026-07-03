@@ -65,7 +65,8 @@ const updateVisibility = async (req, res, next) => {
 
 const moveCardifferentColumn = async (req, res, next) => {
   try {
-    const result = await boardService.moveCardifferentColumn(req.body)
+    const userId = req.jwtDecoded._id
+    const result = await boardService.moveCardifferentColumn(req.body, userId)
 
     res.status(StatusCodes.OK).json(result)
   } catch (error) {
@@ -123,12 +124,9 @@ const getTemplates = async (req, res, next) => {
 
 const cloneTemplate = async (req, res, next) => {
   try {
+    // templateBoardId đã được boardValidation.cloneTemplate validate (required + đúng định dạng ObjectId)
     const userId = req.jwtDecoded._id
     const { templateBoardId } = req.body
-    
-    if (!templateBoardId) {
-      throw new ApiError(StatusCodes.BAD_REQUEST, 'templateBoardId is required')
-    }
 
     const newBoard = await boardService.cloneTemplate(userId, templateBoardId)
     res.status(StatusCodes.CREATED).json({ newBoardId: newBoard._id })

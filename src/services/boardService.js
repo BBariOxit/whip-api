@@ -11,6 +11,7 @@ import { StatusCodes } from 'http-status-codes'
 import { OBJECT_ID_RULE } from '~/utils/validators'
 import { DEFAULT_PAGE, DEFAULT_ITEMS_PER_PAGE } from '~/utils/constants'
 import { ObjectId } from 'mongodb'
+import { getBoardAccessRole } from '~/middlewares/rbacMiddleware'
 
 const createNew = async (userId, reqBody) => {
   try {
@@ -123,8 +124,31 @@ const updateVisibility = async (userId, boardId, type) => {
   }
 }
 
-const moveCardifferentColumn = async (reqBody) => {
+const moveCardifferentColumn = async (reqBody, userId) => {
   try {
+    // Lấy card + 2 column liên quan để validate & phân quyền (không tin boardId từ client)
+    const [card, prevColumn, nextColumn] = await Promise.all([
+      cardModel.findOneById(reqBody.currCardId),
+      columnModel.findOneById(reqBody.prevColumnId),
+      columnModel.findOneById(reqBody.nextColumnId)
+    ])
+    if (!card || !prevColumn || !nextColumn) {
+      throw new ApiError(StatusCodes.NOT_FOUND, 'Card or column not found!')
+    }
+
+    // 👑 Chống IDOR: card và cả 2 column bắt buộc cùng thuộc 1 board
+    const boardId = card.boardId.toString()
+    if (prevColumn.boardId.toString() !== boardId || nextColumn.boardId.toString() !== boardId) {
+      throw new ApiError(StatusCodes.BAD_REQUEST, 'Card and columns must belong to the same board!')
+    }
+
+    // 👑 Phân quyền: chỉ admin/member của board mới được di chuyển card (chặn viewer & người ngoài)
+    const board = await boardModel.findOneById(boardId)
+    const role = board ? await getBoardAccessRole(board, userId) : 'none'
+    if (role !== 'admin' && role !== 'member') {
+      throw new ApiError(StatusCodes.FORBIDDEN, 'You do not have permission to move cards on this board!')
+    }
+
     // B1: Cập nhật mảng cardOrderIds của Column ban đầu chứa nó (bản chất là xóa cái _id của Card ra khỏi mảng cũ)
     await columnModel.update(reqBody.prevColumnId, {
       cardOrderIds: reqBody.prevCardOrderIds,
@@ -238,13 +262,12 @@ const getTemplates = async () => {
 
 const cloneTemplate = async (userId, templateBoardId) => {
   try {
-    // 1. Get template board details (includes its columns and cards)
-    // using user ID null because template doesn't belong to any user, but getDetails checks owners/members. 
-    // Wait, getDetails checks owners/members! So getDetails will fail for a template board with a normal userId.
-    // Let's create a specific fetch or modify getDetails. Actually, template boards have empty ownerIds.
-    // We might need to just find it using findOneById, then fetch columns.
+    // 1. Lấy board template gốc.
+    // 👑 Bảo mật: chỉ chấp nhận board thực sự là template và chưa bị xoá mềm.
+    // Nhờ điều kiện isTemplate này, user KHÔNG thể lợi dụng endpoint để clone (đọc trộm) một
+    // board private bất kỳ bằng cách truyền id của nó vào — vì board thường không có isTemplate=true.
     const templateBoard = await boardModel.findOneById(templateBoardId)
-    if (!templateBoard || !templateBoard.isTemplate) {
+    if (!templateBoard || !templateBoard.isTemplate || templateBoard._destroy) {
       throw new ApiError(StatusCodes.NOT_FOUND, 'Template not found!')
     }
 
@@ -263,13 +286,15 @@ const cloneTemplate = async (userId, templateBoardId) => {
       boardId: templateBoard._id
     }).toArray()
 
-    // 2. Create new board based on template
+    // 2. Tạo board mới từ template.
+    // Cố tình KHÔNG gán workspaceId => board thuộc "Personal Boards" của user.
+    // boardModel.createNew sẽ tự set ownerIds = [userId] => người clone chính là chủ board.
     const newTitle = `${templateBoard.title} (Bản sao)`
     const newBoardData = {
       title: newTitle,
       slug: slugify(newTitle),
       description: templateBoard.description,
-      type: 'private', // User's cloned board might be private by default
+      type: 'private', // Board mới mặc định private, chỉ mình chủ board thấy
       background: templateBoard.background,
       isTemplate: false
     }

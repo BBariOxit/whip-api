@@ -57,6 +57,8 @@ export const requireWorkspaceRole = (allowedRoles = []) => {
 import { boardModel } from '~/models/boardModel'
 import { columnModel } from '~/models/columnModel'
 import { cardModel } from '~/models/cardModel'
+import { labelModel } from '~/models/labelModel'
+import { commentModel } from '~/models/commentModel'
 import { BOARD_TYPES, WORKSPACE_ROLES } from '~/utils/constants'
 
 /**
@@ -112,22 +114,46 @@ export const requireBoardRole = (allowedRoles = []) => {
       // Do đó nếu allowedRoles chỉ yêu cầu 'viewer' và không có userId, ta có thể du di hoặc bắt buộc.
       // Tốt nhất là requireAuth ở route, nếu route cho phép optional auth (như GET /boards/:id) thì userId có thể undefined.
       const userId = req.jwtDecoded?._id
-      
-      let boardId = req.body.boardId || req.query.boardId
+
+      // boardId có thể đến trực tiếp từ body/query, hoặc từ route param :boardId (vd custom-fields)
+      let boardId = req.body.boardId || req.query.boardId || req.params.boardId
       let board = null
 
-      // Tự động tìm boardId nếu route là columns/:id hoặc cards/:id
-      if (!boardId && req.params.id) {
-        if (req.baseUrl.includes('/boards')) {
-          boardId = req.params.id
-        } else if (req.baseUrl.includes('/columns')) {
-          const column = await columnModel.findOneById(req.params.id)
-          if (!column) throw new ApiError(StatusCodes.NOT_FOUND, 'Column not found!')
-          boardId = column.boardId.toString()
-        } else if (req.baseUrl.includes('/cards')) {
-          const card = await cardModel.findOneById(req.params.id)
-          if (!card) throw new ApiError(StatusCodes.NOT_FOUND, 'Card not found!')
-          boardId = card.boardId.toString()
+      // Nếu chưa xác định được boardId, suy ra từ resource đang thao tác tùy nhóm route
+      if (!boardId) {
+        if (req.baseUrl.includes('/comments') || req.baseUrl.includes('/activities')) {
+          // Comment/activity gắn với 1 card -> boardId suy ra từ card.
+          // cardId nằm ở body/query (create/list) hoặc suy ngược từ chính comment (update/delete/replies).
+          let cardId = req.body.cardId || req.query.cardId
+          if (!cardId && req.baseUrl.includes('/comments')) {
+            const commentId = req.params.id || req.params.parentId
+            if (commentId) {
+              const comment = await commentModel.findOneById(commentId)
+              if (!comment) throw new ApiError(StatusCodes.NOT_FOUND, 'Comment not found!')
+              cardId = comment.cardId.toString()
+            }
+          }
+          if (cardId) {
+            const card = await cardModel.findOneById(cardId)
+            if (!card) throw new ApiError(StatusCodes.NOT_FOUND, 'Card not found!')
+            boardId = card.boardId.toString()
+          }
+        } else if (req.params.id) {
+          if (req.baseUrl.includes('/boards')) {
+            boardId = req.params.id
+          } else if (req.baseUrl.includes('/columns')) {
+            const column = await columnModel.findOneById(req.params.id)
+            if (!column) throw new ApiError(StatusCodes.NOT_FOUND, 'Column not found!')
+            boardId = column.boardId.toString()
+          } else if (req.baseUrl.includes('/labels')) {
+            const label = await labelModel.findOneById(req.params.id)
+            if (!label) throw new ApiError(StatusCodes.NOT_FOUND, 'Label not found!')
+            boardId = label.boardId.toString()
+          } else if (req.baseUrl.includes('/cards')) {
+            const card = await cardModel.findOneById(req.params.id)
+            if (!card) throw new ApiError(StatusCodes.NOT_FOUND, 'Card not found!')
+            boardId = card.boardId.toString()
+          }
         }
       }
 
