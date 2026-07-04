@@ -1,5 +1,6 @@
 import { StatusCodes } from 'http-status-codes'
 import { workspaceService } from '~/services/workspaceService'
+import ApiError from '~/utils/ApiError'
 
 const createNew = async (req, res, next) => {
   try {
@@ -127,6 +128,29 @@ const getMembers = async (req, res, next) => {
   }
 }
 
+const transferOwnership = async (req, res, next) => {
+  try {
+    const actorUserId = req.jwtDecoded._id
+    const workspaceId = req.params.id
+    const { targetUserId } = req.body
+    const result = await workspaceService.transferOwnership(actorUserId, workspaceId, targetUserId)
+    res.status(StatusCodes.OK).json(result)
+  } catch (error) {
+    next(error)
+  }
+}
+
+const updateLogo = async (req, res, next) => {
+  try {
+    const workspaceId = req.params.id
+    const logoFile = req.file
+    const result = await workspaceService.updateLogo(workspaceId, logoFile)
+    res.status(StatusCodes.OK).json(result)
+  } catch (error) {
+    next(error)
+  }
+}
+
 export const workspaceController = {
   createNew,
   getWorkspacesByUserId,
@@ -138,5 +162,7 @@ export const workspaceController = {
   removeMember,
   updateMemberRole,
   leaveWorkspace,
-  getMembers
+  getMembers,
+  transferOwnership,
+  updateLogo
 }

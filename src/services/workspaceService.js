@@ -12,6 +12,7 @@ import { ObjectId } from 'mongodb'
 import crypto from 'crypto'
 import { env } from '~/config/environment'
 import { brevoProvider } from '~/providers/brevoProvider'
+import { cloudinaryProvider } from '~/providers/CloudinaryProvider'
 
 const createNew = async (userId, email, reqBody) => {
   try {
@@ -86,6 +87,66 @@ const update = async (workspaceId, reqBody) => {
       if (reqBody[field] !== undefined) updateData[field] = reqBody[field]
     }
     const updatedWorkspace = await workspaceModel.update(workspaceId, updateData)
+    return updatedWorkspace
+  } catch (error) {
+    throw error
+  }
+}
+
+/**
+ * Chuyển quyền sở hữu workspace cho một member khác
+ *
+ * EDGE CASES:
+ * 1. Không thể transfer cho chính mình
+ * 2. Chỉ owner hiện tại mới được transfer
+ * 3. Target phải là member active của workspace
+ */
+const transferOwnership = async (actorUserId, workspaceId, newOwnerUserId) => {
+  try {
+    if (actorUserId.toString() === newOwnerUserId.toString()) {
+      throw new ApiError(StatusCodes.BAD_REQUEST, 'You are already the owner of this workspace.')
+    }
+
+    const workspace = await workspaceModel.findById(workspaceId)
+    if (!workspace) {
+      throw new ApiError(StatusCodes.NOT_FOUND, 'Workspace not found!')
+    }
+
+    // Actor phải là owner hiện tại
+    const actorMember = workspace.members.find(m => m.userId && m.userId.toString() === actorUserId.toString())
+    if (!actorMember || actorMember.role !== WORKSPACE_ROLES.OWNER) {
+      throw new ApiError(StatusCodes.FORBIDDEN, 'Only the workspace owner can transfer ownership.')
+    }
+
+    // Target phải là member active (không phải pending, không phải chính actor)
+    const targetMember = workspace.members.find(m => m.userId && m.userId.toString() === newOwnerUserId.toString())
+    if (!targetMember) {
+      throw new ApiError(StatusCodes.NOT_FOUND, 'The selected user is not a member of this workspace!')
+    }
+    if (targetMember.status !== 'active') {
+      throw new ApiError(StatusCodes.BAD_REQUEST, 'You can only transfer ownership to an active member.')
+    }
+
+    const updatedWorkspace = await workspaceModel.transferOwnership(workspaceId, actorUserId, newOwnerUserId)
+    return updatedWorkspace
+  } catch (error) {
+    throw error
+  }
+}
+
+/**
+ * Upload / cập nhật logo workspace (Cloudinary)
+ */
+const updateLogo = async (workspaceId, logoFile) => {
+  try {
+    if (!logoFile) {
+      throw new ApiError(StatusCodes.BAD_REQUEST, 'No logo file provided!')
+    }
+    const uploadResult = await cloudinaryProvider.streamUpload(logoFile.buffer, 'workspaces')
+    const updatedWorkspace = await workspaceModel.update(workspaceId, {
+      logo: uploadResult.secure_url,
+      updatedAt: Date.now()
+    })
     return updatedWorkspace
   } catch (error) {
     throw error
@@ -419,5 +480,7 @@ export const workspaceService = {
   removeMember,
   updateMemberRole,
   leaveWorkspace,
-  getMembers
+  getMembers,
+  transferOwnership,
+  updateLogo
 }

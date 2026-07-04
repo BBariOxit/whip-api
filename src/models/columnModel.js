@@ -21,7 +21,7 @@ const COLUMN_COLLECTION_SCHEMA = Joi.object({
 })
 
 // chỉ định ra những field mà chúng ta ko muốn cho phép cập nhật trong hàm update
-const INVALID_UPDATE_FIELDS = ['_id', 'boardId', 'createdAt']
+const INVALID_UPDATE_FIELDS = ['_id', 'boardId', 'createdAt', '_destroy', 'isTemplate']
 
 const validateBeforeCreate = async (data) => {
   return await COLUMN_COLLECTION_SCHEMA.validateAsync(data, { abortEarly: false })
@@ -99,7 +99,7 @@ const update = async (columnId, updateData) => {
     // lọc những cái field mà chúng ta ko cho phép cập nhật linh tinh
     Object.keys(updateData).forEach(fieldName => {
       if (INVALID_UPDATE_FIELDS.includes(fieldName)) {
-        delete updateData(fieldName)
+        delete updateData[fieldName]
       }
     })
 

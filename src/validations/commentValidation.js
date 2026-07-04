@@ -6,9 +6,9 @@ import { OBJECT_ID_RULE, OBJECT_ID_RULE_MESSAGE } from '~/utils/validators'
 const createNew = async (req, res, next) => {
   const correctCondition = Joi.object({
     cardId: Joi.string().required().pattern(OBJECT_ID_RULE).message(OBJECT_ID_RULE_MESSAGE),
-    content: Joi.string().required().trim().strict(),
+    content: Joi.string().required().min(1).max(5000).trim().strict(),
     parentId: Joi.string().pattern(OBJECT_ID_RULE).message(OBJECT_ID_RULE_MESSAGE).allow(null).optional(),
-    replyToUserDisplayName: Joi.string().allow(null).optional()
+    replyToUserDisplayName: Joi.string().max(100).allow(null).optional()
   })
 
   try {
@@ -50,7 +50,7 @@ const getReplies = async (req, res, next) => {
 
 const updateComment = async (req, res, next) => {
   const correctCondition = Joi.object({
-    content: Joi.string().required().trim().strict()
+    content: Joi.string().required().min(1).max(5000).trim().strict()
   })
 
   try {

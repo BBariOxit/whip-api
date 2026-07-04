@@ -10,6 +10,9 @@ const WORKSPACE_COLLECTION_SCHEMA = Joi.object({
   title: Joi.string().required().min(3).max(50).trim().strict(),
   description: Joi.string().max(255).trim().strict().default(''),
 
+  // Logo (Cloudinary secure_url)
+  logo: Joi.string().uri().allow(null).default(null),
+
   // Access & Security settings
   visibility: Joi.string().valid('private', 'public').default('private'),
   invitePermission: Joi.string().valid('admin', 'all').default('admin'),
@@ -243,6 +246,33 @@ const updateMemberRole = async (workspaceId, userIdOrEmail, newRole) => {
   }
 }
 
+// Chuyển quyền sở hữu: owner hiện tại -> admin, member được chọn -> owner (atomic)
+const transferOwnership = async (workspaceId, currentOwnerUserId, newOwnerUserId) => {
+  try {
+    const db = GET_DB()
+    const result = await db.collection(WORKSPACE_COLLECTION_NAME).findOneAndUpdate(
+      { _id: new ObjectId(workspaceId) },
+      {
+        $set: {
+          'members.$[oldOwner].role': WORKSPACE_ROLES.ADMIN,
+          'members.$[newOwner].role': WORKSPACE_ROLES.OWNER,
+          updatedAt: Date.now()
+        }
+      },
+      {
+        arrayFilters: [
+          { 'oldOwner.userId': new ObjectId(currentOwnerUserId) },
+          { 'newOwner.userId': new ObjectId(newOwnerUserId) }
+        ],
+        returnDocument: 'after'
+      }
+    )
+    return result
+  } catch (error) {
+    throw new Error(error)
+  }
+}
+
 // Tìm workspace có chứa member cụ thể với role cho phép
 // Dùng bởi rbacMiddleware
 const findByMemberWithRole = async (workspaceId, userId, allowedRoles) => {
@@ -323,6 +353,7 @@ export const workspaceModel = {
   addMember,
   removeMember,
   updateMemberRole,
+  transferOwnership,
   findByMemberWithRole,
   getDetailsWithMembers,
   findMemberByEmail,
