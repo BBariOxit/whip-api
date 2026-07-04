@@ -10,6 +10,12 @@ const WORKSPACE_COLLECTION_SCHEMA = Joi.object({
   title: Joi.string().required().min(3).max(50).trim().strict(),
   description: Joi.string().max(255).trim().strict().default(''),
 
+  // Access & Security settings
+  visibility: Joi.string().valid('private', 'public').default('private'),
+  invitePermission: Joi.string().valid('admin', 'all').default('admin'),
+  boardCreation: Joi.string().valid('all', 'admin').default('all'),
+  boardDeletion: Joi.string().valid('admin', 'all').default('admin'),
+
   // Embedded members array
   members: Joi.array().items(
     Joi.object({

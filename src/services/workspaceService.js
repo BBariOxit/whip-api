@@ -79,9 +79,11 @@ const deleteItem = async (userId, workspaceId) => {
 
 const update = async (workspaceId, reqBody) => {
   try {
-    const updateData = {
-      ...reqBody,
-      updatedAt: Date.now()
+    // Chỉ cho phép cập nhật các field an toàn (tránh mass-assignment: _destroy, members, ...)
+    const ALLOWED_FIELDS = ['title', 'description', 'visibility', 'invitePermission', 'boardCreation', 'boardDeletion']
+    const updateData = { updatedAt: Date.now() }
+    for (const field of ALLOWED_FIELDS) {
+      if (reqBody[field] !== undefined) updateData[field] = reqBody[field]
     }
     const updatedWorkspace = await workspaceModel.update(workspaceId, updateData)
     return updatedWorkspace

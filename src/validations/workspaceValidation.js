@@ -23,13 +23,17 @@ const createNew = async (req, res, next) => {
 const update = async (req, res, next) => {
   const correctCondition = Joi.object({
     title: Joi.string().min(3).max(30).trim().strict(),
-    description: Joi.string().max(255).trim().strict().allow('')
+    description: Joi.string().max(255).trim().strict().allow(''),
+    visibility: Joi.string().valid('private', 'public'),
+    invitePermission: Joi.string().valid('admin', 'all'),
+    boardCreation: Joi.string().valid('all', 'admin'),
+    boardDeletion: Joi.string().valid('admin', 'all')
   })
 
   try {
-    await correctCondition.validateAsync(req.body, { 
+    await correctCondition.validateAsync(req.body, {
       abortEarly: false,
-      allowUnknown: true
+      allowUnknown: false
     })
     next()
   } catch (error) {
