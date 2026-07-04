@@ -151,6 +151,17 @@ const updateLogo = async (req, res, next) => {
   }
 }
 
+const updateNotificationPrefs = async (req, res, next) => {
+  try {
+    const userId = req.jwtDecoded._id
+    const workspaceId = req.params.id
+    const result = await workspaceService.updateNotificationPrefs(userId, workspaceId, req.body)
+    res.status(StatusCodes.OK).json(result)
+  } catch (error) {
+    next(error)
+  }
+}
+
 export const workspaceController = {
   createNew,
   getWorkspacesByUserId,
@@ -164,5 +175,6 @@ export const workspaceController = {
   leaveWorkspace,
   getMembers,
   transferOwnership,
-  updateLogo
+  updateLogo,
+  updateNotificationPrefs
 }

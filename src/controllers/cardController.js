@@ -1,5 +1,6 @@
 import { StatusCodes } from 'http-status-codes'
 import { cardService } from '~/services/cardService'
+import { notificationService } from '~/services/notificationService'
 
 
 const createNew = async (req, res, next) => {
@@ -7,6 +8,16 @@ const createNew = async (req, res, next) => {
     const createCard = await cardService.createNew(req.body)
 
     res.status(StatusCodes.CREATED).json(createCard)
+
+    // Thông báo "board activity" (in-app) cho các thành viên board — best-effort, không chặn response
+    if (createCard?.boardId) {
+      notificationService.notifyBoardActivity({
+        io: req.app.get('socketio'),
+        boardId: createCard.boardId.toString(),
+        actorId: req.jwtDecoded._id,
+        detail: `added the card "${createCard.title}"`
+      })
+    }
   } catch (error) {
     next(error)
   }

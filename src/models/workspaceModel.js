@@ -6,6 +6,23 @@ import { OBJECT_ID_RULE, OBJECT_ID_RULE_MESSAGE, EMAIL_RULE, EMAIL_RULE_MESSAGE 
 
 const WORKSPACE_COLLECTION_NAME = 'workspaces'
 
+// Tuỳ chọn thông báo mặc định cho mỗi thành viên (cá nhân theo từng workspace)
+const DEFAULT_NOTIFICATION_PREFS = {
+  memberJoins: true,
+  boardChanges: true,
+  weeklyDigest: false,
+  mentions: true,
+  boardActivity: false
+}
+
+const NOTIFICATION_PREFS_SCHEMA = Joi.object({
+  memberJoins: Joi.boolean().default(true),
+  boardChanges: Joi.boolean().default(true),
+  weeklyDigest: Joi.boolean().default(false),
+  mentions: Joi.boolean().default(true),
+  boardActivity: Joi.boolean().default(false)
+}).default(DEFAULT_NOTIFICATION_PREFS)
+
 const WORKSPACE_COLLECTION_SCHEMA = Joi.object({
   title: Joi.string().required().min(3).max(50).trim().strict(),
   description: Joi.string().max(255).trim().strict().default(''),
@@ -31,7 +48,9 @@ const WORKSPACE_COLLECTION_SCHEMA = Joi.object({
       ).default(WORKSPACE_ROLES.MEMBER),
       status: Joi.string().valid('active', 'pending').default('active'),
       inviteToken: Joi.string().allow(null).default(null),
-      joinedAt: Joi.date().timestamp('javascript').default(Date.now)
+      joinedAt: Joi.date().timestamp('javascript').default(Date.now),
+      // Tuỳ chọn thông báo cá nhân của thành viên này trong workspace
+      notificationPrefs: NOTIFICATION_PREFS_SCHEMA
     })
   ).default([]),
 
@@ -273,6 +292,29 @@ const transferOwnership = async (workspaceId, currentOwnerUserId, newOwnerUserId
   }
 }
 
+// Cập nhật tuỳ chọn thông báo cá nhân cho 1 member (set nguyên object cho gọn)
+const updateMemberNotificationPrefs = async (workspaceId, userId, prefs) => {
+  try {
+    const db = GET_DB()
+    const result = await db.collection(WORKSPACE_COLLECTION_NAME).findOneAndUpdate(
+      { _id: new ObjectId(workspaceId) },
+      {
+        $set: {
+          'members.$[m].notificationPrefs': prefs,
+          updatedAt: Date.now()
+        }
+      },
+      {
+        arrayFilters: [{ 'm.userId': new ObjectId(userId) }],
+        returnDocument: 'after'
+      }
+    )
+    return result
+  } catch (error) {
+    throw new Error(error)
+  }
+}
+
 // Tìm workspace có chứa member cụ thể với role cho phép
 // Dùng bởi rbacMiddleware
 const findByMemberWithRole = async (workspaceId, userId, allowedRoles) => {
@@ -345,6 +387,8 @@ const getDetailsWithMembers = async (workspaceId) => {
 export const workspaceModel = {
   WORKSPACE_COLLECTION_NAME,
   WORKSPACE_COLLECTION_SCHEMA,
+  DEFAULT_NOTIFICATION_PREFS,
+  updateMemberNotificationPrefs,
   createNew,
   findById,
   getWorkspacesByUserId,

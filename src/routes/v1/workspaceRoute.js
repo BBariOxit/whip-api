@@ -62,4 +62,8 @@ Router.route('/:id/transfer-ownership')
 Router.route('/:id/logo')
   .put(authMiddleware.isAuthorized, requireWorkspaceRole([OWNER]), multerUploadMiddleware.upload.single('logo'), workspaceController.updateLogo)
 
+// Cập nhật tuỳ chọn thông báo cá nhân (mọi member đều chỉnh prefs của chính mình)
+Router.route('/:id/notifications')
+  .put(authMiddleware.isAuthorized, requireWorkspaceRole([OWNER, ADMIN, MEMBER]), workspaceValidation.updateNotificationPrefs, workspaceController.updateNotificationPrefs)
+
 export const workspaceRoute = Router

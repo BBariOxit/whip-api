@@ -13,6 +13,8 @@ import crypto from 'crypto'
 import { env } from '~/config/environment'
 import { brevoProvider } from '~/providers/brevoProvider'
 import { cloudinaryProvider } from '~/providers/CloudinaryProvider'
+import { notificationService } from './notificationService'
+import { NOTIFICATION_TYPES } from '~/utils/constants'
 
 const createNew = async (userId, email, reqBody) => {
   try {
@@ -135,6 +137,36 @@ const transferOwnership = async (actorUserId, workspaceId, newOwnerUserId) => {
 }
 
 /**
+ * Cập nhật tuỳ chọn thông báo cá nhân của user trong 1 workspace.
+ * Ai cũng chỉnh được prefs CỦA CHÍNH MÌNH (không phải quyền admin).
+ */
+const updateNotificationPrefs = async (userId, workspaceId, prefs) => {
+  try {
+    const workspace = await workspaceModel.findById(workspaceId)
+    if (!workspace) {
+      throw new ApiError(StatusCodes.NOT_FOUND, 'Workspace not found!')
+    }
+
+    const member = workspace.members.find(m => m.userId && m.userId.toString() === userId.toString())
+    if (!member) {
+      throw new ApiError(StatusCodes.NOT_FOUND, 'You are not a member of this workspace!')
+    }
+
+    // Gộp: mặc định -> prefs đang lưu -> prefs mới gửi lên (đảm bảo object luôn đủ 5 key)
+    const mergedPrefs = {
+      ...workspaceModel.DEFAULT_NOTIFICATION_PREFS,
+      ...(member.notificationPrefs || {}),
+      ...prefs
+    }
+
+    const updatedWorkspace = await workspaceModel.updateMemberNotificationPrefs(workspaceId, userId, mergedPrefs)
+    return updatedWorkspace
+  } catch (error) {
+    throw error
+  }
+}
+
+/**
  * Upload / cập nhật logo workspace (Cloudinary)
  */
 const updateLogo = async (workspaceId, logoFile) => {
@@ -248,6 +280,18 @@ const acceptInvite = async (userId, userEmail, token, workspaceId) => {
 
     // Accept (cập nhật status active, xóa token, gán userId)
     await workspaceModel.acceptInviteMember(workspaceId, token, userId)
+
+    // Báo cho các thành viên hiện có: có người mới tham gia (email, best-effort — không chặn)
+    const existingActiveMemberIds = workspace.members
+      .filter(m => m.userId && m.status === 'active')
+      .map(m => m.userId.toString())
+    notificationService.dispatch({
+      type: NOTIFICATION_TYPES.MEMBER_JOINED,
+      workspaceId,
+      recipientIds: existingActiveMemberIds,
+      actorId: userId,
+      context: { workspaceTitle: workspace.title }
+    })
 
     return { message: 'Invitation accepted successfully!', workspaceId }
   } catch (error) {
@@ -482,5 +526,6 @@ export const workspaceService = {
   leaveWorkspace,
   getMembers,
   transferOwnership,
-  updateLogo
+  updateLogo,
+  updateNotificationPrefs
 }

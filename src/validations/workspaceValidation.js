@@ -83,10 +83,28 @@ const transferOwnership = async (req, res, next) => {
   }
 }
 
+const updateNotificationPrefs = async (req, res, next) => {
+  const correctCondition = Joi.object({
+    memberJoins: Joi.boolean(),
+    boardChanges: Joi.boolean(),
+    weeklyDigest: Joi.boolean(),
+    mentions: Joi.boolean(),
+    boardActivity: Joi.boolean()
+  }).min(1)
+
+  try {
+    await correctCondition.validateAsync(req.body, { abortEarly: false, allowUnknown: false })
+    next()
+  } catch (error) {
+    next(new ApiError(StatusCodes.UNPROCESSABLE_ENTITY, new Error(error).message))
+  }
+}
+
 export const workspaceValidation = {
   createNew,
   update,
   inviteMember,
   updateMemberRole,
-  transferOwnership
+  transferOwnership,
+  updateNotificationPrefs
 }
