@@ -46,6 +46,30 @@ export const CARD_MEMBER_ACTIONS = {
   REMOVE: 'REMOVE'
 }
 
+// Các loại notification (thông báo chung, khác với invitations)
+export const NOTIFICATION_TYPES = {
+  MEMBER_JOINED: 'MEMBER_JOINED',
+  BOARD_CREATED: 'BOARD_CREATED',
+  BOARD_DELETED: 'BOARD_DELETED',
+  BOARD_ACTIVITY: 'BOARD_ACTIVITY',
+  MENTION: 'MENTION'
+}
+
+// Cấu hình cho từng loại: gắn với toggle nào trong workspace member.notificationPrefs,
+// và gửi qua kênh nào ('email' | 'inApp'). Đây là "bảng đấu dây" trung tâm.
+export const NOTIFICATION_CONFIG = {
+  MEMBER_JOINED: { toggleKey: 'memberJoins', channel: 'email' },
+  BOARD_CREATED: { toggleKey: 'boardChanges', channel: 'email' },
+  BOARD_DELETED: { toggleKey: 'boardChanges', channel: 'email' },
+  BOARD_ACTIVITY: { toggleKey: 'boardActivity', channel: 'inApp' },
+  MENTION: { toggleKey: 'mentions', channel: 'inApp' }
+}
+
+// Tên socket event realtime cho notification chung
+export const SOCKET_EVENTS = {
+  NEW_NOTIFICATION: 'BE_NEW_NOTIFICATION'
+}
+
 export const ACTIVITY_ACTION_TYPES = {
   UPDATE_DATE: 'UPDATE_DATE',
   SET_DATE: 'SET_DATE',

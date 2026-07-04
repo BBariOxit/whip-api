@@ -12,6 +12,9 @@ import { ObjectId } from 'mongodb'
 import crypto from 'crypto'
 import { env } from '~/config/environment'
 import { brevoProvider } from '~/providers/brevoProvider'
+import { cloudinaryProvider } from '~/providers/CloudinaryProvider'
+import { notificationService } from './notificationService'
+import { NOTIFICATION_TYPES } from '~/utils/constants'
 
 const createNew = async (userId, email, reqBody) => {
   try {
@@ -79,11 +82,103 @@ const deleteItem = async (userId, workspaceId) => {
 
 const update = async (workspaceId, reqBody) => {
   try {
-    const updateData = {
-      ...reqBody,
-      updatedAt: Date.now()
+    // Chỉ cho phép cập nhật các field an toàn (tránh mass-assignment: _destroy, members, ...)
+    const ALLOWED_FIELDS = ['title', 'description', 'visibility', 'invitePermission', 'boardCreation', 'boardDeletion']
+    const updateData = { updatedAt: Date.now() }
+    for (const field of ALLOWED_FIELDS) {
+      if (reqBody[field] !== undefined) updateData[field] = reqBody[field]
     }
     const updatedWorkspace = await workspaceModel.update(workspaceId, updateData)
+    return updatedWorkspace
+  } catch (error) {
+    throw error
+  }
+}
+
+/**
+ * Chuyển quyền sở hữu workspace cho một member khác
+ *
+ * EDGE CASES:
+ * 1. Không thể transfer cho chính mình
+ * 2. Chỉ owner hiện tại mới được transfer
+ * 3. Target phải là member active của workspace
+ */
+const transferOwnership = async (actorUserId, workspaceId, newOwnerUserId) => {
+  try {
+    if (actorUserId.toString() === newOwnerUserId.toString()) {
+      throw new ApiError(StatusCodes.BAD_REQUEST, 'You are already the owner of this workspace.')
+    }
+
+    const workspace = await workspaceModel.findById(workspaceId)
+    if (!workspace) {
+      throw new ApiError(StatusCodes.NOT_FOUND, 'Workspace not found!')
+    }
+
+    // Actor phải là owner hiện tại
+    const actorMember = workspace.members.find(m => m.userId && m.userId.toString() === actorUserId.toString())
+    if (!actorMember || actorMember.role !== WORKSPACE_ROLES.OWNER) {
+      throw new ApiError(StatusCodes.FORBIDDEN, 'Only the workspace owner can transfer ownership.')
+    }
+
+    // Target phải là member active (không phải pending, không phải chính actor)
+    const targetMember = workspace.members.find(m => m.userId && m.userId.toString() === newOwnerUserId.toString())
+    if (!targetMember) {
+      throw new ApiError(StatusCodes.NOT_FOUND, 'The selected user is not a member of this workspace!')
+    }
+    if (targetMember.status !== 'active') {
+      throw new ApiError(StatusCodes.BAD_REQUEST, 'You can only transfer ownership to an active member.')
+    }
+
+    const updatedWorkspace = await workspaceModel.transferOwnership(workspaceId, actorUserId, newOwnerUserId)
+    return updatedWorkspace
+  } catch (error) {
+    throw error
+  }
+}
+
+/**
+ * Cập nhật tuỳ chọn thông báo cá nhân của user trong 1 workspace.
+ * Ai cũng chỉnh được prefs CỦA CHÍNH MÌNH (không phải quyền admin).
+ */
+const updateNotificationPrefs = async (userId, workspaceId, prefs) => {
+  try {
+    const workspace = await workspaceModel.findById(workspaceId)
+    if (!workspace) {
+      throw new ApiError(StatusCodes.NOT_FOUND, 'Workspace not found!')
+    }
+
+    const member = workspace.members.find(m => m.userId && m.userId.toString() === userId.toString())
+    if (!member) {
+      throw new ApiError(StatusCodes.NOT_FOUND, 'You are not a member of this workspace!')
+    }
+
+    // Gộp: mặc định -> prefs đang lưu -> prefs mới gửi lên (đảm bảo object luôn đủ 5 key)
+    const mergedPrefs = {
+      ...workspaceModel.DEFAULT_NOTIFICATION_PREFS,
+      ...(member.notificationPrefs || {}),
+      ...prefs
+    }
+
+    const updatedWorkspace = await workspaceModel.updateMemberNotificationPrefs(workspaceId, userId, mergedPrefs)
+    return updatedWorkspace
+  } catch (error) {
+    throw error
+  }
+}
+
+/**
+ * Upload / cập nhật logo workspace (Cloudinary)
+ */
+const updateLogo = async (workspaceId, logoFile) => {
+  try {
+    if (!logoFile) {
+      throw new ApiError(StatusCodes.BAD_REQUEST, 'No logo file provided!')
+    }
+    const uploadResult = await cloudinaryProvider.streamUpload(logoFile.buffer, 'workspaces')
+    const updatedWorkspace = await workspaceModel.update(workspaceId, {
+      logo: uploadResult.secure_url,
+      updatedAt: Date.now()
+    })
     return updatedWorkspace
   } catch (error) {
     throw error
@@ -185,6 +280,18 @@ const acceptInvite = async (userId, userEmail, token, workspaceId) => {
 
     // Accept (cập nhật status active, xóa token, gán userId)
     await workspaceModel.acceptInviteMember(workspaceId, token, userId)
+
+    // Báo cho các thành viên hiện có: có người mới tham gia (email, best-effort — không chặn)
+    const existingActiveMemberIds = workspace.members
+      .filter(m => m.userId && m.status === 'active')
+      .map(m => m.userId.toString())
+    notificationService.dispatch({
+      type: NOTIFICATION_TYPES.MEMBER_JOINED,
+      workspaceId,
+      recipientIds: existingActiveMemberIds,
+      actorId: userId,
+      context: { workspaceTitle: workspace.title }
+    })
 
     return { message: 'Invitation accepted successfully!', workspaceId }
   } catch (error) {
@@ -417,5 +524,8 @@ export const workspaceService = {
   removeMember,
   updateMemberRole,
   leaveWorkspace,
-  getMembers
+  getMembers,
+  transferOwnership,
+  updateLogo,
+  updateNotificationPrefs
 }

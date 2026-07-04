@@ -68,7 +68,9 @@ const BOARD_COLLECTION_SCHEMA = Joi.object({
 })
 
 // chỉ định ra những field mà chúng ta ko muốn cho phép cập nhật trong hàm update
-const INVALID_UPDATE_FIELDS = ['_id', 'createdAt']
+// (các field nhạy cảm bên dưới đều được quản lý bằng method riêng: pushMemberIds, starBoard,
+//  pushCustomField, deleteOneById... nên KHÔNG cho phép cập nhật qua generic update để chặn mass-assignment)
+const INVALID_UPDATE_FIELDS = ['_id', 'createAt', 'createdAt', '_destroy', 'ownerIds', 'memberIds', 'starredBy', 'customFields', 'isTemplate', 'slug']
 
 const validateBeforeCreate = async (data) => {
   return await BOARD_COLLECTION_SCHEMA.validateAsync(data, { abortEarly: false })
@@ -231,7 +233,7 @@ const update = async (boardId, updateData) => {
     // lọc những cái field mà chúng ta ko cho phép cập nhật linh tinh
     Object.keys(updateData).forEach(fieldName => {
       if (INVALID_UPDATE_FIELDS.includes(fieldName)) {
-        delete updateData(fieldName)
+        delete updateData[fieldName]
       }
     })
 

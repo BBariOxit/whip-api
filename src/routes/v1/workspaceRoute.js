@@ -3,6 +3,7 @@ import { workspaceController } from '~/controllers/workspaceController'
 import { authMiddleware } from '~/middlewares/authMiddleware'
 import { requireWorkspaceRole } from '~/middlewares/rbacMiddleware'
 import { workspaceValidation } from '~/validations/workspaceValidation'
+import { multerUploadMiddleware } from '~/middlewares/multerUploadMiddleware'
 import { WORKSPACE_ROLES } from '~/utils/constants'
 
 const Router = express.Router()
@@ -52,5 +53,17 @@ Router.route('/:id/members/:targetUserId')
 // Tự rời workspace (mọi member đều dùng được)
 Router.route('/:id/leave')
   .post(authMiddleware.isAuthorized, requireWorkspaceRole([OWNER, ADMIN, MEMBER]), workspaceController.leaveWorkspace)
+
+// Chuyển quyền sở hữu (chỉ Owner)
+Router.route('/:id/transfer-ownership')
+  .post(authMiddleware.isAuthorized, requireWorkspaceRole([OWNER]), workspaceValidation.transferOwnership, workspaceController.transferOwnership)
+
+// Upload / cập nhật logo workspace (chỉ Owner)
+Router.route('/:id/logo')
+  .put(authMiddleware.isAuthorized, requireWorkspaceRole([OWNER]), multerUploadMiddleware.upload.single('logo'), workspaceController.updateLogo)
+
+// Cập nhật tuỳ chọn thông báo cá nhân (mọi member đều chỉnh prefs của chính mình)
+Router.route('/:id/notifications')
+  .put(authMiddleware.isAuthorized, requireWorkspaceRole([OWNER, ADMIN, MEMBER]), workspaceValidation.updateNotificationPrefs, workspaceController.updateNotificationPrefs)
 
 export const workspaceRoute = Router

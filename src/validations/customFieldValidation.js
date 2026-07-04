@@ -4,12 +4,12 @@ import ApiError from '~/utils/ApiError'
 
 const createNew = async (req, res, next) => {
   const correctCondition = Joi.object({
-    name: Joi.string().required().trim().strict(),
+    name: Joi.string().required().max(50).trim().strict(),
     type: Joi.string().valid('text', 'number', 'checkbox', 'dropdown', 'date').required(),
     options: Joi.array().items(
       Joi.object({
         _id: Joi.string().required(),
-        text: Joi.string().required().trim().strict(),
+        text: Joi.string().required().max(50).trim().strict(),
         color: Joi.string().optional()
       })
     ).optional().default([]),
@@ -28,11 +28,11 @@ const createNew = async (req, res, next) => {
 
 const update = async (req, res, next) => {
   const correctCondition = Joi.object({
-    name: Joi.string().trim().strict(),
+    name: Joi.string().max(50).trim().strict(),
     options: Joi.array().items(
       Joi.object({
         _id: Joi.string().required(),
-        text: Joi.string().required().trim().strict(),
+        text: Joi.string().required().max(50).trim().strict(),
         color: Joi.string().optional()
       })
     ),

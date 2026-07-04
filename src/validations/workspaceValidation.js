@@ -23,13 +23,17 @@ const createNew = async (req, res, next) => {
 const update = async (req, res, next) => {
   const correctCondition = Joi.object({
     title: Joi.string().min(3).max(30).trim().strict(),
-    description: Joi.string().max(255).trim().strict().allow('')
+    description: Joi.string().max(255).trim().strict().allow(''),
+    visibility: Joi.string().valid('private', 'public'),
+    invitePermission: Joi.string().valid('admin', 'all'),
+    boardCreation: Joi.string().valid('all', 'admin'),
+    boardDeletion: Joi.string().valid('admin', 'all')
   })
 
   try {
-    await correctCondition.validateAsync(req.body, { 
+    await correctCondition.validateAsync(req.body, {
       abortEarly: false,
-      allowUnknown: true
+      allowUnknown: false
     })
     next()
   } catch (error) {
@@ -66,9 +70,41 @@ const updateMemberRole = async (req, res, next) => {
   }
 }
 
+const transferOwnership = async (req, res, next) => {
+  const correctCondition = Joi.object({
+    targetUserId: Joi.string().required().pattern(OBJECT_ID_RULE).message(OBJECT_ID_RULE_MESSAGE)
+  })
+
+  try {
+    await correctCondition.validateAsync(req.body, { abortEarly: false })
+    next()
+  } catch (error) {
+    next(new ApiError(StatusCodes.UNPROCESSABLE_ENTITY, new Error(error).message))
+  }
+}
+
+const updateNotificationPrefs = async (req, res, next) => {
+  const correctCondition = Joi.object({
+    memberJoins: Joi.boolean(),
+    boardChanges: Joi.boolean(),
+    weeklyDigest: Joi.boolean(),
+    mentions: Joi.boolean(),
+    boardActivity: Joi.boolean()
+  }).min(1)
+
+  try {
+    await correctCondition.validateAsync(req.body, { abortEarly: false, allowUnknown: false })
+    next()
+  } catch (error) {
+    next(new ApiError(StatusCodes.UNPROCESSABLE_ENTITY, new Error(error).message))
+  }
+}
+
 export const workspaceValidation = {
   createNew,
   update,
   inviteMember,
-  updateMemberRole
+  updateMemberRole,
+  transferOwnership,
+  updateNotificationPrefs
 }
