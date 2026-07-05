@@ -171,7 +171,7 @@ const moveCardifferentColumn = async (reqBody, userId) => {
   }
 }
 
-const getBoards = async (userId, page, itemsPerPage, queryFilters) => {
+const getBoards = async (userId, page, itemsPerPage, queryFilters, sortOption) => {
   try {
     if (!page) page = DEFAULT_PAGE
     if (!itemsPerPage) itemsPerPage = DEFAULT_ITEMS_PER_PAGE
@@ -180,7 +180,8 @@ const getBoards = async (userId, page, itemsPerPage, queryFilters) => {
       userId,
       parseInt(page, 10),
       parseInt(itemsPerPage, 10),
-      queryFilters
+      queryFilters,
+      sortOption
     )
 
     return results
