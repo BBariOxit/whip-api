@@ -31,8 +31,19 @@ const markAllRead = async (req, res, next) => {
   }
 }
 
+const remove = async (req, res, next) => {
+  try {
+    const userId = req.jwtDecoded._id
+    const result = await notificationService.deleteNotification(req.params.id, userId)
+    res.status(StatusCodes.OK).json(result)
+  } catch (error) {
+    next(error)
+  }
+}
+
 export const notificationController = {
   getMyNotifications,
   markRead,
-  markAllRead
+  markAllRead,
+  remove
 }

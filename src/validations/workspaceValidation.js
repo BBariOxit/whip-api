@@ -87,7 +87,6 @@ const updateNotificationPrefs = async (req, res, next) => {
   const correctCondition = Joi.object({
     memberJoins: Joi.boolean(),
     boardChanges: Joi.boolean(),
-    weeklyDigest: Joi.boolean(),
     mentions: Joi.boolean(),
     boardActivity: Joi.boolean()
   }).min(1)

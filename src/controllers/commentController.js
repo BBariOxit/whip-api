@@ -1,5 +1,6 @@
 import { StatusCodes } from 'http-status-codes'
 import { commentService } from '~/services/commentService'
+import { notificationService } from '~/services/notificationService'
 
 const createNew = async (req, res, next) => {
   try {
@@ -10,6 +11,15 @@ const createNew = async (req, res, next) => {
     io.to(`card:${createdComment.cardId.toString()}`).emit('BE_NEW_COMMENT', createdComment)
 
     res.status(StatusCodes.CREATED).json(createdComment)
+
+    // Thông báo @mention (in-app) cho member được nhắc tên — best-effort, không chặn response
+    notificationService.notifyMentions({
+      io,
+      cardId: createdComment.cardId.toString(),
+      actorId: req.jwtDecoded._id,
+      actorName: createdComment.userDisplayName,
+      content: createdComment.content
+    })
   } catch (error) {
     next(error)
   }

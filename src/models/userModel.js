@@ -64,6 +64,17 @@ const findOneByEmail = async (emailValue) => {
   } catch (error) { throw new Error(error) }
 }
 
+// Lấy nhiều user theo danh sách id (dùng để đối chiếu @mention với handle của member)
+const findManyByIds = async (userIds) => {
+  try {
+    const objectIds = (userIds || []).map(id => new ObjectId(id))
+    const results = await GET_DB().collection(USER_COLLECTION_NAME)
+      .find({ _id: { $in: objectIds } })
+      .toArray()
+    return results
+  } catch (error) { throw new Error(error) }
+}
+
 const update = async (userId, updateData) => {
   try {
     // Lọc những field mà chúng ta không cho phép cập nhật linh tinh
@@ -89,5 +100,6 @@ export const userModel = {
   createNew,
   findOneById,
   findOneByEmail,
+  findManyByIds,
   update
 }

@@ -29,6 +29,7 @@ const createNew = async (userId, reqBody) => {
     const getNewBoard = await boardModel.findOneById(createdBoard.insertedId)
 
     // trả kq về , trong service luôn phải có return
+    // (thông báo "board created" in-app do controller bắn vì cần io)
     return getNewBoard
   } catch (error) {
     throw error
@@ -202,7 +203,13 @@ const deleteItem = async (boardId) => {
     // Xoá toàn bộ card thuộc board
     await cardModel.deleteManyByBoardId(boardId)
 
-    return { deleteResult: 'Board and its Columns, Cards deleted successfully!' }
+    // Trả kèm workspaceId + title để controller bắn thông báo "board deleted" in-app.
+    // Cascade (xoá cả workspace) gọi thẳng service nên KHÔNG bắn — tránh spam hàng loạt.
+    return {
+      deleteResult: 'Board and its Columns, Cards deleted successfully!',
+      workspaceId: targetBoard.workspaceId,
+      boardTitle: targetBoard.title
+    }
   } catch (error) {
     throw error
   }

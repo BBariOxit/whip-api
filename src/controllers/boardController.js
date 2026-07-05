@@ -2,6 +2,8 @@ import { StatusCodes } from 'http-status-codes'
 import { boardService } from '~/services/boardService'
 import { cardService } from '~/services/cardService'
 import { columnService } from '~/services/columnService'
+import { notificationService } from '~/services/notificationService'
+import { NOTIFICATION_TYPES } from '~/utils/constants'
 
 
 const createNew = async (req, res, next) => {
@@ -17,6 +19,18 @@ const createNew = async (req, res, next) => {
 
     // có kq thì trả về phía client
     res.status(StatusCodes.CREATED).json(createBoard)
+
+    // Thông báo in-app cho thành viên workspace: có board mới — best-effort, không chặn response
+    if (createBoard?.workspaceId) {
+      notificationService.notifyWorkspaceBoardChange({
+        io: req.app.get('socketio'),
+        type: NOTIFICATION_TYPES.BOARD_CREATED,
+        workspaceId: createBoard.workspaceId.toString(),
+        boardTitle: createBoard.title,
+        boardId: createBoard._id.toString(),
+        actorId: userId
+      })
+    }
   } catch (error) {
     next(error)
   }
@@ -96,6 +110,18 @@ const deleteItem = async (req, res, next) => {
     const boardId = req.params.id
     const result = await boardService.deleteItem(boardId)
     res.status(StatusCodes.OK).json(result)
+
+    // Thông báo in-app cho thành viên workspace: 1 board vừa bị xoá — best-effort, không chặn response
+    // (board đã bị xoá nên không truyền boardId để điều hướng)
+    if (result?.workspaceId) {
+      notificationService.notifyWorkspaceBoardChange({
+        io: req.app.get('socketio'),
+        type: NOTIFICATION_TYPES.BOARD_DELETED,
+        workspaceId: result.workspaceId.toString(),
+        boardTitle: result.boardTitle,
+        actorId: req.jwtDecoded._id
+      })
+    }
   } catch (error) {
     next(error)
   }

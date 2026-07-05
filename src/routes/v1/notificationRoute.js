@@ -16,4 +16,8 @@ Router.route('/read-all')
 Router.route('/:id/read')
   .put(authMiddleware.isAuthorized, notificationController.markRead)
 
+// Xoá (ẩn) 1 notification của chính user
+Router.route('/:id')
+  .delete(authMiddleware.isAuthorized, notificationController.remove)
+
 export const notificationRoute = Router
