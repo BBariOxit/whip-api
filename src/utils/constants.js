@@ -59,8 +59,8 @@ export const NOTIFICATION_TYPES = {
 // và gửi qua kênh nào ('email' | 'inApp'). Đây là "bảng đấu dây" trung tâm.
 export const NOTIFICATION_CONFIG = {
   MEMBER_JOINED: { toggleKey: 'memberJoins', channel: 'email' },
-  BOARD_CREATED: { toggleKey: 'boardChanges', channel: 'email' },
-  BOARD_DELETED: { toggleKey: 'boardChanges', channel: 'email' },
+  BOARD_CREATED: { toggleKey: 'boardChanges', channel: 'inApp' },
+  BOARD_DELETED: { toggleKey: 'boardChanges', channel: 'inApp' },
   BOARD_ACTIVITY: { toggleKey: 'boardActivity', channel: 'inApp' },
   MENTION: { toggleKey: 'mentions', channel: 'inApp' }
 }
@@ -69,6 +69,9 @@ export const NOTIFICATION_CONFIG = {
 export const SOCKET_EVENTS = {
   NEW_NOTIFICATION: 'BE_NEW_NOTIFICATION'
 }
+
+// Số ngày giữ notification in-app trước khi TTL index của Mongo tự xoá
+export const NOTIFICATION_TTL_DAYS = 60
 
 export const ACTIVITY_ACTION_TYPES = {
   UPDATE_DATE: 'UPDATE_DATE',

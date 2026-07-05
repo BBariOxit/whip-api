@@ -10,7 +10,6 @@ const WORKSPACE_COLLECTION_NAME = 'workspaces'
 const DEFAULT_NOTIFICATION_PREFS = {
   memberJoins: true,
   boardChanges: true,
-  weeklyDigest: false,
   mentions: true,
   boardActivity: false
 }
@@ -18,7 +17,6 @@ const DEFAULT_NOTIFICATION_PREFS = {
 const NOTIFICATION_PREFS_SCHEMA = Joi.object({
   memberJoins: Joi.boolean().default(true),
   boardChanges: Joi.boolean().default(true),
-  weeklyDigest: Joi.boolean().default(false),
   mentions: Joi.boolean().default(true),
   boardActivity: Joi.boolean().default(false)
 }).default(DEFAULT_NOTIFICATION_PREFS)

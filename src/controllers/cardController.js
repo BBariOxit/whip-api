@@ -75,6 +75,16 @@ const deleteItem = async (req, res, next) => {
     const result = await cardService.deleteItem(cardId, userInfo)
 
     res.status(StatusCodes.OK).json(result)
+
+    // Thông báo "board activity" (in-app) cho thành viên board — best-effort, không chặn response
+    if (result?.boardId) {
+      notificationService.notifyBoardActivity({
+        io: req.app.get('socketio'),
+        boardId: result.boardId.toString(),
+        actorId: userInfo._id,
+        detail: `deleted the card "${result.cardTitle}"`
+      })
+    }
   } catch (error) { next(error) }
 }
 
@@ -85,6 +95,16 @@ const archiveCard = async (req, res, next) => {
     const result = await cardService.archiveCard(cardId, userInfo)
 
     res.status(StatusCodes.OK).json(result)
+
+    // Thông báo "board activity" (in-app) cho thành viên board — best-effort, không chặn response
+    if (result?.boardId) {
+      notificationService.notifyBoardActivity({
+        io: req.app.get('socketio'),
+        boardId: result.boardId.toString(),
+        actorId: userInfo._id,
+        detail: `archived the card "${result.cardTitle}"`
+      })
+    }
   } catch (error) { next(error) }
 }
 

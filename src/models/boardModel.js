@@ -259,8 +259,19 @@ const update = async (boardId, updateData) => {
     throw new Error(error)
   }
 }
-const getBoards = async (userId, page, itemsPerPage, queryFilters) => {
+// Ánh xạ tuỳ chọn sắp xếp từ FE sang stage $sort của Mongo
+const BOARD_SORT_MAP = {
+  recent: { createdAt: -1 },
+  'a-z': { title: 1 },
+  'z-a': { title: -1 }
+}
+
+// Escape ký tự đặc biệt để tìm kiếm literal (tránh RegExp lỗi khi user gõ ( [ * ? ...)
+const escapeRegex = (str) => String(str).replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+
+const getBoards = async (userId, page, itemsPerPage, queryFilters, sortOption) => {
   try {
+    const sortStage = BOARD_SORT_MAP[sortOption] || BOARD_SORT_MAP.recent
     const queryConditions = [
       // điều kiện 1: board chưa bị xóa
       { _destroy: false },
@@ -270,7 +281,27 @@ const getBoards = async (userId, page, itemsPerPage, queryFilters) => {
 
     // Điều kiện 03: Phân quyền xem Board
     if (queryFilters && queryFilters.workspaceId && queryFilters.workspaceId !== 'null') {
-      if (queryFilters.workspaceId === 'guest') {
+      if (queryFilters.workspaceId === 'all') {
+        // Global search (navbar): board của mình (owner/member) + board workspace_visible/public
+        // trong các workspace mình tham gia. Loại board private của người khác.
+        const db = GET_DB()
+        const myWorkspaces = await db.collection('workspaces').find({
+          members: { $elemMatch: { userId: new ObjectId(userId), status: 'active' } }
+        }).toArray()
+        const myWorkspaceIds = myWorkspaces.map(ws => ws._id)
+
+        queryConditions.push({
+          $or: [
+            { ownerIds: { $all: [new ObjectId(userId)] } },
+            { memberIds: { $all: [new ObjectId(userId)] } },
+            {
+              workspaceId: { $in: myWorkspaceIds },
+              type: { $in: [BOARD_TYPES.WORKSPACE_VISIBLE, BOARD_TYPES.PUBLIC] }
+            }
+          ]
+        })
+        delete queryFilters.workspaceId
+      } else if (queryFilters.workspaceId === 'guest') {
         const db = GET_DB()
         const myWorkspaces = await db.collection('workspaces').find({
           'members.userId': new ObjectId(userId)
@@ -319,7 +350,7 @@ const getBoards = async (userId, page, itemsPerPage, queryFilters) => {
             queryConditions.push({ workspaceId: null })
           }
         } else {
-          queryConditions.push({ [key]: { $regex: new RegExp(queryFilters[key], 'i') } })
+          queryConditions.push({ [key]: { $regex: escapeRegex(queryFilters[key]), $options: 'i' } })
         }
       })
     }
@@ -327,8 +358,8 @@ const getBoards = async (userId, page, itemsPerPage, queryFilters) => {
     const query = await GET_DB().collection(BOARD_COLLECTION_NAME).aggregate(
       [
         { $match: { $and: queryConditions } },
-        { $sort: { title: 1 } },
-        { $facet: { 
+        { $sort: sortStage },
+        { $facet: {
           'queryBoards': [
             { $skip: pagingSkipValue(page, itemsPerPage) },
             { $limit: itemsPerPage }

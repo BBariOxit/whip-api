@@ -2,9 +2,10 @@ import Joi from 'joi'
 import { ObjectId } from 'mongodb'
 import { GET_DB } from '~/config/mongodb'
 import { OBJECT_ID_RULE, OBJECT_ID_RULE_MESSAGE } from '~/utils/validators'
-import { NOTIFICATION_TYPES } from '~/utils/constants'
+import { NOTIFICATION_TYPES, NOTIFICATION_TTL_DAYS } from '~/utils/constants'
 
 const NOTIFICATION_COLLECTION_NAME = 'notifications'
+const NOTIFICATION_TTL_MS = NOTIFICATION_TTL_DAYS * 24 * 60 * 60 * 1000
 
 const NOTIFICATION_COLLECTION_SCHEMA = Joi.object({
   // Người nhận thông báo
@@ -20,6 +21,8 @@ const NOTIFICATION_COLLECTION_SCHEMA = Joi.object({
 
   isRead: Joi.boolean().default(false),
   createdAt: Joi.date().timestamp('javascript').default(Date.now),
+  // Mốc hết hạn (BSON Date) — TTL index tự xoá notification khi qua mốc này
+  expireAt: Joi.date().default(() => new Date(Date.now() + NOTIFICATION_TTL_MS)),
   _destroy: Joi.boolean().default(false)
 })
 
@@ -40,6 +43,26 @@ const createNew = async (data) => {
     }
     const result = await GET_DB().collection(NOTIFICATION_COLLECTION_NAME).insertOne(insertData)
     return await GET_DB().collection(NOTIFICATION_COLLECTION_NAME).findOne({ _id: result.insertedId })
+  } catch (error) {
+    throw new Error(error)
+  }
+}
+
+// Tạo nhiều notification trong 1 lệnh insertMany (fan-out @all / board đông người)
+const createMany = async (dataList) => {
+  try {
+    if (!Array.isArray(dataList) || dataList.length === 0) return []
+    const validList = await Promise.all(dataList.map(d => validateBeforeCreate(d)))
+    const insertData = validList.map(v => ({
+      ...v,
+      userId: new ObjectId(v.userId),
+      actorId: v.actorId ? new ObjectId(v.actorId) : null,
+      workspaceId: v.workspaceId ? new ObjectId(v.workspaceId) : null,
+      boardId: v.boardId ? new ObjectId(v.boardId) : null
+    }))
+    const result = await GET_DB().collection(NOTIFICATION_COLLECTION_NAME).insertMany(insertData)
+    // Trả về document đầy đủ kèm _id để controller emit socket (khỏi query lại)
+    return insertData.map((doc, idx) => ({ ...doc, _id: result.insertedIds[idx] }))
   } catch (error) {
     throw new Error(error)
   }
@@ -94,12 +117,42 @@ const markAllRead = async (userId) => {
   }
 }
 
+// Xoá (ẩn) 1 notification của chính user — soft delete qua cờ _destroy
+const softDelete = async (notificationId, userId) => {
+  try {
+    const result = await GET_DB().collection(NOTIFICATION_COLLECTION_NAME).findOneAndUpdate(
+      { _id: new ObjectId(notificationId), userId: new ObjectId(userId) },
+      { $set: { _destroy: true } },
+      { returnDocument: 'after' }
+    )
+    return result
+  } catch (error) {
+    throw new Error(error)
+  }
+}
+
+// Tạo index (idempotent) — gọi 1 lần lúc khởi động server
+const initIndexes = async () => {
+  const collection = GET_DB().collection(NOTIFICATION_COLLECTION_NAME)
+  await Promise.all([
+    // Liệt kê notification theo user, sort mới nhất trước
+    collection.createIndex({ userId: 1, createdAt: -1 }),
+    // Đếm chưa đọc / mark-all-read theo user + isRead
+    collection.createIndex({ userId: 1, isRead: 1 }),
+    // TTL: Mongo tự xoá document khi expireAt < hiện tại
+    collection.createIndex({ expireAt: 1 }, { expireAfterSeconds: 0 })
+  ])
+}
+
 export const notificationModel = {
   NOTIFICATION_COLLECTION_NAME,
   NOTIFICATION_COLLECTION_SCHEMA,
   createNew,
+  createMany,
   findByUser,
   countUnread,
   markRead,
-  markAllRead
+  markAllRead,
+  softDelete,
+  initIndexes
 }

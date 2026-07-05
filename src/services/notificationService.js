@@ -1,9 +1,10 @@
 import { notificationModel } from '~/models/notificationModel'
 import { workspaceModel } from '~/models/workspaceModel'
 import { boardModel } from '~/models/boardModel'
+import { cardModel } from '~/models/cardModel'
 import { userModel } from '~/models/userModel'
 import { brevoProvider } from '~/providers/brevoProvider'
-import { NOTIFICATION_CONFIG, NOTIFICATION_TYPES, SOCKET_EVENTS } from '~/utils/constants'
+import { NOTIFICATION_CONFIG, NOTIFICATION_TYPES, SOCKET_EVENTS, WORKSPACE_ROLES } from '~/utils/constants'
 
 // Render nội dung thông báo theo loại (dùng cho cả in-app lẫn email)
 const buildMessage = (type, actorName, context = {}) => {
@@ -72,6 +73,8 @@ const dispatch = async ({ io, type, workspaceId, recipientIds, actorId, actorNam
     const uniqueRecipients = [...new Set(recipientIds.map(id => id?.toString()).filter(Boolean))]
       .filter(id => id !== actorId?.toString())
 
+    // Gom notification in-app để ghi 1 lần bằng insertMany (tránh await từng doc khi fan-out)
+    const inAppDocs = []
     for (const userId of uniqueRecipients) {
       const member = memberMap.get(userId)
       // Chỉ gửi cho member active của workspace (prefs sống ở đây)
@@ -81,7 +84,7 @@ const dispatch = async ({ io, type, workspaceId, recipientIds, actorId, actorNam
       if (!prefs[config.toggleKey]) continue
 
       if (config.channel === 'inApp') {
-        const doc = await notificationModel.createNew({
+        inAppDocs.push({
           userId,
           type,
           message,
@@ -89,12 +92,21 @@ const dispatch = async ({ io, type, workspaceId, recipientIds, actorId, actorNam
           workspaceId,
           boardId: context.boardId || null
         })
-        if (io) io.to(`user:${userId}`).emit(SOCKET_EVENTS.NEW_NOTIFICATION, doc)
       } else if (config.channel === 'email') {
         try {
           await brevoProvider.sendEmail(member.email, 'Whip notification', buildEmailHtml(message))
         } catch (emailErr) {
           console.error('Notification email failed:', emailErr?.message)
+        }
+      }
+    }
+
+    // Ghi tất cả in-app trong 1 lệnh rồi đẩy realtime tới từng room user
+    if (inAppDocs.length > 0) {
+      const created = await notificationModel.createMany(inAppDocs)
+      if (io) {
+        for (const doc of created) {
+          io.to(`user:${doc.userId.toString()}`).emit(SOCKET_EVENTS.NEW_NOTIFICATION, doc)
         }
       }
     }
@@ -132,6 +144,123 @@ const notifyBoardActivity = async ({ io, boardId, actorId, actorName, detail }) 
   }
 }
 
+/**
+ * Báo cho các thành viên workspace khi 1 board được TẠO hoặc XOÁ (in-app).
+ * Chỉ áp dụng cho board thuộc workspace — board cá nhân (không có workspaceId) bỏ qua.
+ * boardId (nếu có) để click điều hướng — chỉ truyền khi board còn tồn tại (BOARD_CREATED).
+ * Best-effort: không throw để tránh chặn hành động tạo/xoá board.
+ */
+const notifyWorkspaceBoardChange = async ({ io, type, workspaceId, boardTitle, boardId, actorId, actorName }) => {
+  try {
+    if (!workspaceId) return
+    const workspace = await workspaceModel.findById(workspaceId)
+    if (!workspace) return
+
+    const recipientIds = (workspace.members || [])
+      .filter(m => m.userId && m.status === 'active')
+      .map(m => m.userId.toString())
+
+    await dispatch({
+      io,
+      type,
+      workspaceId: workspaceId.toString(),
+      recipientIds,
+      actorId,
+      actorName,
+      context: { boardTitle, boardId: boardId || null }
+    })
+  } catch (error) {
+    console.error('notifyWorkspaceBoardChange error:', error?.message)
+  }
+}
+
+// Rút các "@token" (không chứa dấu cách) trong nội dung comment để so khớp với handle member
+const MENTION_TOKEN_REGEX = /@([\p{L}\p{N}._-]+)/gu
+// Token đặc biệt: "@all" báo cho toàn bộ thành viên board
+const MENTION_ALL_TOKEN = 'all'
+const extractMentionTokens = (content) => {
+  const tokens = new Set()
+  if (!content) return tokens
+  for (const match of content.matchAll(MENTION_TOKEN_REGEX)) {
+    tokens.add(match[1].toLowerCase())
+  }
+  return tokens
+}
+
+/**
+ * Bắn thông báo MENTION (in-app) khi có người @nhắc tên trong comment.
+ * - "@all": báo cho TẤT CẢ thành viên (owner + member) của board.
+ * - "@<handle>": so khớp username / displayName(1 từ) / phần trước @ của email.
+ *   Ứng viên = thành viên board + owner/admin của workspace (owner/admin được tag
+ *   ở BẤT KỲ board nào trong workspace, kể cả chưa join board đó).
+ * Chỉ áp dụng cho card thuộc board có workspace (prefs sống ở workspace).
+ * dispatch còn lọc thêm: chỉ gửi cho member active của workspace đang BẬT toggle mentions.
+ * Best-effort: không throw.
+ */
+const notifyMentions = async ({ io, cardId, actorId, actorName, content }) => {
+  try {
+    const tokens = extractMentionTokens(content)
+    if (tokens.size === 0) return
+
+    const card = await cardModel.findOneById(cardId)
+    if (!card?.boardId) return
+    const board = await boardModel.findOneById(card.boardId)
+    if (!board?.workspaceId) return
+    const workspace = await workspaceModel.findById(board.workspaceId)
+    if (!workspace) return
+
+    const actorStr = actorId?.toString()
+
+    // Thành viên của board (owner + member)
+    const boardMemberIds = [...new Set(
+      [...(board.ownerIds || []), ...(board.memberIds || [])].map(id => id.toString())
+    )]
+
+    // Owner/Admin của workspace — được phép tag xuyên board
+    const workspaceAdminIds = (workspace.members || [])
+      .filter(m => m.userId && m.status === 'active' &&
+        (m.role === WORKSPACE_ROLES.OWNER || m.role === WORKSPACE_ROLES.ADMIN))
+      .map(m => m.userId.toString())
+
+    const recipientSet = new Set()
+
+    // "@all" → toàn bộ thành viên board
+    if (tokens.has(MENTION_ALL_TOKEN)) {
+      boardMemberIds.forEach(id => recipientSet.add(id))
+    }
+
+    // Mention theo handle: ứng viên gồm thành viên board + owner/admin workspace
+    const candidateIds = [...new Set([...boardMemberIds, ...workspaceAdminIds])]
+    if (candidateIds.length > 0) {
+      const users = await userModel.findManyByIds(candidateIds)
+      for (const u of users) {
+        const handles = [u.username, u.displayName, u.email?.split('@')[0]]
+          .filter(Boolean)
+          .map(h => h.toLowerCase())
+        if (handles.some(h => tokens.has(h))) recipientSet.add(u._id.toString())
+      }
+    }
+
+    // Không tự báo cho chính người viết
+    recipientSet.delete(actorStr)
+
+    const recipientIds = [...recipientSet]
+    if (recipientIds.length === 0) return
+
+    await dispatch({
+      io,
+      type: NOTIFICATION_TYPES.MENTION,
+      workspaceId: board.workspaceId.toString(),
+      recipientIds,
+      actorId,
+      actorName,
+      context: { boardTitle: card.title, boardId: board._id.toString() }
+    })
+  } catch (error) {
+    console.error('notifyMentions error:', error?.message)
+  }
+}
+
 const getForUser = async (userId) => {
   const notifications = await notificationModel.findByUser(userId)
   const unreadCount = await notificationModel.countUnread(userId)
@@ -147,10 +276,17 @@ const markAllAsRead = async (userId) => {
   return { success: true }
 }
 
+const deleteNotification = async (notificationId, userId) => {
+  return await notificationModel.softDelete(notificationId, userId)
+}
+
 export const notificationService = {
   dispatch,
   notifyBoardActivity,
+  notifyWorkspaceBoardChange,
+  notifyMentions,
   getForUser,
   markAsRead,
-  markAllAsRead
+  markAllAsRead,
+  deleteNotification
 }

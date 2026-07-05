@@ -266,7 +266,8 @@ const deleteItem = async (cardId, userInfo) => {
       content: `đã xóa một thẻ "${targetCard.title}"`
     })
 
-    return { deleteResult: 'Card deleted successfully!' }
+    // Trả kèm boardId + title để controller bắn thông báo "board activity" (in-app)
+    return { deleteResult: 'Card deleted successfully!', boardId: targetCard.boardId, cardTitle: targetCard.title }
   } catch (error) {
     throw error
   }
@@ -297,7 +298,8 @@ const archiveCard = async (cardId, userInfo) => {
     //   content: `đã lưu trữ thẻ "${targetCard.title}"`
     // })
 
-    return { archiveResult: 'Card archived successfully!' }
+    // Trả kèm boardId + title để controller bắn thông báo "board activity" (in-app)
+    return { archiveResult: 'Card archived successfully!', boardId: targetCard.boardId, cardTitle: targetCard.title }
   } catch (error) {
     throw error
   }
