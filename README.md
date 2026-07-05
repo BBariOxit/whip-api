@@ -7,23 +7,27 @@
 ![Node.js](https://img.shields.io/badge/Node.js-20.x-339933?logo=nodedotjs&logoColor=white&labelColor=333333) ![Express](https://img.shields.io/badge/Express-4.18-000000?logo=express&logoColor=white&labelColor=333333) ![MongoDB](https://img.shields.io/badge/MongoDB-7.0-47A248?logo=mongodb&logoColor=white&labelColor=333333) ![JWT](https://img.shields.io/badge/Auth-JWT-000000?logo=jsonwebtokens&logoColor=white&labelColor=333333) ![Cloudinary](https://img.shields.io/badge/Media-Cloudinary-3448C5?logo=cloudinary&logoColor=white&labelColor=333333) ![Socket.io](https://img.shields.io/badge/Realtime-Socket.io-010101?logo=socket.io&logoColor=white&labelColor=333333)
 
 ## 🎯 Introduction
-Whip API is the backend engine powering the Whip App. It handles all complex business logic, database operations, robust authentication, and real-time connectivity to provide a seamless experience for the frontend application.
+Whip API is the backend engine powering the **Whip App** frontend (separate repository). It handles all business logic, database operations, authentication & authorization, transactional email, media storage, and real-time connectivity to deliver a seamless collaborative experience.
 
 ## 🛠 Tech Stack
-The backend is engineered using industry-standard technologies:
-- **Core:** Node.js & Express.js
-- **Database:** MongoDB (Native Driver for optimized querying)
-- **Authentication:** JWT (JSON Web Token) & bcryptjs for robust security.
-- **File Storage:** Cloudinary & Multer (for lightweight and efficient file uploads).
-- **Real-time:** Socket.io (for instant real-time data synchronization).
-- **Transpiler:** Babel (for writing modern ES6+ Javascript).
+- **Core:** Node.js 20 & Express.js
+- **Database:** MongoDB 7 (native driver) with compound & TTL indexes
+- **Auth:** JWT (access/refresh tokens) & bcryptjs; Google OAuth token verification
+- **Validation:** Joi (schema validation at every write)
+- **File Storage:** Cloudinary & Multer (avatars, covers, attachments, logos)
+- **Email:** Brevo (transactional emails for invites & notifications)
+- **Real-time:** Socket.io (per-user & per-card rooms)
+- **Transpiler:** Babel (modern ES6+ JavaScript)
 
-## 🔥 Key Features
-Core capabilities of the API include:
-- 🔐 **Secure Authentication & Authorization:** Comprehensive token-based security (Access/Refresh Tokens).
-- ⚡ **RESTful Architecture:** Fast, reliable, and standardized API endpoints.
-- 📡 **WebSocket Support:** Integrated Socket.io for responsive real-time features.
-- ☁️ **Cloud Storage Integration:** Direct file upload and management via Cloudinary.
+## 🔥 Key Features & Modules
+- 🔐 **Auth & RBAC:** JWT access/refresh flow, workspace roles (Owner / Admin / Member) and a dynamic board-level access-control middleware.
+- 🏢 **Workspaces:** members, email invitations, role management, ownership transfer, leave/delete with cascading cleanup.
+- 📋 **Boards / Columns / Cards:** full CRUD, drag-and-drop ordering, templates, archiving, and visibility (private / public / workspace-visible).
+- 💬 **Comments & @Mentions:** threaded comments with server-side mention parsing that triggers notifications.
+- 🔔 **Notifications:** in-app (real-time via Socket.io) **and** email, per-user preferences, with automatic cleanup via a TTL index.
+- 📨 **Invitations:** board & workspace invites delivered through Brevo email.
+- 🔎 **Search & Sort:** board title search (regex-escaped, safe) and sorting scoped to the boards a user can actually access.
+- ☁️ **Media:** direct Cloudinary uploads and management.
 
 ## 🚀 Getting Started
 Follow these steps to get the development environment running locally:
@@ -38,33 +42,49 @@ cd whip-api
 # 3. Install dependencies
 npm install
 
-# 4. Start the development server (with hot-reload via nodemon)
+# 4. Start the development server (hot-reload via nodemon)
 npm run dev
 ```
 
 ## ⚙️ Environment Variables
-Properly configuring environment variables is required for the application to function correctly. 
-Create a `.env` file in the root directory based on `.env.example` and fill in the necessary details:
+Create a `.env` file in the root directory based on `.env.example` and fill in your values:
 
 ```env
+# Database
 MONGODB_URI='<your-mongodb-connection-string>'
 DATABASE_NAME='<your-database-name>'
+
+# Server & domains
 LOCAL_DEV_APP_HOST='localhost'
 LOCAL_DEV_APP_PORT=8017
+AUTHOR='<your-name>'
+WEBSITE_DOMAIN_DEVELOPMENT='http://localhost:5173'
+WEBSITE_DOMAIN_PRODUCTION='<your-production-frontend-url>'
 
-# JWT Configuration
+# JWT Authentication
 ACCESS_TOKEN_SECRET_SIGNATURE='<your-secret-key>'
-ACCESS_TOKEN_LIFE='14d'
+ACCESS_TOKEN_LIFE='1h'
 REFRESH_TOKEN_SECRET_SIGNATURE='<your-refresh-secret-key>'
-REFRESH_TOKEN_LIFE='30d'
+REFRESH_TOKEN_LIFE='14d'
 
-# Cloudinary (For image uploads)
+# Cloudinary (media uploads)
 CLOUDINARY_CLOUD_NAME='<your-cloud-name>'
 CLOUDINARY_API_KEY='<your-api-key>'
 CLOUDINARY_API_SECRET='<your-api-secret>'
+
+# Email (Brevo transactional email)
+BREVO_API_KEY='<your-brevo-api-key>'
+ADMIN_EMAIL_ADDRESS='<verified-sender-email>'
+ADMIN_EMAIL_NAME='<sender-display-name>'
+
+# Google OAuth (token verification)
+VITE_GOOGLE_CLIENT_ID='<your-google-oauth-client-id>'
 ```
 
-*(Refer to the `.env.example` file in the repository for additional configuration keys).*
+*(See `.env.example` for the full list, including optional GitHub OAuth keys.)*
+
+## 🐳 Deployment
+A `Dockerfile` and `docker-compose.yml` are included for containerized deployment. See **`DEPLOYMENT_GUIDE.md`** for step-by-step instructions.
 
 ## 🤝 Contributing & License
 - **Contributing:** This is an open-source project, and Pull Requests (PRs) or bug reports are highly appreciated. Please ensure your changes are thoroughly tested locally before submitting a PR.
