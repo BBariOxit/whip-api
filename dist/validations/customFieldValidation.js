@@ -17,11 +17,11 @@ var createNew = /*#__PURE__*/function () {
       while (1) switch (_context.prev = _context.next) {
         case 0:
           correctCondition = _joi["default"].object({
-            name: _joi["default"].string().required().trim().strict(),
+            name: _joi["default"].string().required().max(50).trim().strict(),
             type: _joi["default"].string().valid('text', 'number', 'checkbox', 'dropdown', 'date').required(),
             options: _joi["default"].array().items(_joi["default"].object({
               _id: _joi["default"].string().required(),
-              text: _joi["default"].string().required().trim().strict(),
+              text: _joi["default"].string().required().max(50).trim().strict(),
               color: _joi["default"].string().optional()
             })).optional()["default"]([]),
             showOnFront: _joi["default"]["boolean"]()["default"](false)
@@ -58,10 +58,10 @@ var update = /*#__PURE__*/function () {
       while (1) switch (_context2.prev = _context2.next) {
         case 0:
           correctCondition = _joi["default"].object({
-            name: _joi["default"].string().trim().strict(),
+            name: _joi["default"].string().max(50).trim().strict(),
             options: _joi["default"].array().items(_joi["default"].object({
               _id: _joi["default"].string().required(),
-              text: _joi["default"].string().required().trim().strict(),
+              text: _joi["default"].string().required().max(50).trim().strict(),
               color: _joi["default"].string().optional()
             })),
             showOnFront: _joi["default"]["boolean"]()

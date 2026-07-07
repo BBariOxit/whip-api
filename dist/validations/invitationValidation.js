@@ -10,6 +10,7 @@ var _asyncToGenerator2 = _interopRequireDefault(require("@babel/runtime/helpers/
 var _joi = _interopRequireDefault(require("joi"));
 var _httpStatusCodes = require("http-status-codes");
 var _ApiError = _interopRequireDefault(require("../utils/ApiError"));
+var _validators = require("../utils/validators");
 var createNewBoardInvitation = /*#__PURE__*/function () {
   var _ref = (0, _asyncToGenerator2["default"])(/*#__PURE__*/_regenerator["default"].mark(function _callee(req, res, next) {
     var correctCondition;
@@ -17,8 +18,8 @@ var createNewBoardInvitation = /*#__PURE__*/function () {
       while (1) switch (_context.prev = _context.next) {
         case 0:
           correctCondition = _joi["default"].object({
-            inviteeEmail: _joi["default"].string().required(),
-            boardId: _joi["default"].string().required()
+            inviteeEmail: _joi["default"].string().required().pattern(_validators.EMAIL_RULE).message(_validators.EMAIL_RULE_MESSAGE),
+            boardId: _joi["default"].string().required().pattern(_validators.OBJECT_ID_RULE).message(_validators.OBJECT_ID_RULE_MESSAGE)
           });
           _context.prev = 1;
           _context.next = 4;

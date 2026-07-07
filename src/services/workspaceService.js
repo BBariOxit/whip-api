@@ -67,8 +67,9 @@ const deleteItem = async (userId, workspaceId) => {
     const boards = await boardModel.findByWorkspaceId(workspaceId)
     
     // Loop through each board and delete it (cascade: xóa columns + cards)
+    // Owner xoá workspace → luôn là 'admin' đối với mọi board
     for (const board of boards) {
-      await boardService.deleteItem(board._id.toString())
+      await boardService.deleteItem(board._id.toString(), 'admin')
     }
 
     // Cuối cùng xoá workspace
@@ -195,6 +196,16 @@ const inviteMember = async (inviterId, workspaceId, reqBody) => {
     const workspace = await workspaceModel.findById(workspaceId)
     if (!workspace) {
       throw new ApiError(StatusCodes.NOT_FOUND, 'Workspace not found!')
+    }
+
+    // Enforce invitePermission setting:
+    // 'admin' (default) → chỉ Owner + Admin invite được
+    // 'all' → tất cả member đều invite được
+    if (workspace.invitePermission !== 'all') {
+      const actor = workspace.members.find(m => m.userId?.toString() === inviterId.toString() && m.status === 'active')
+      if (actor?.role === WORKSPACE_ROLES.MEMBER) {
+        throw new ApiError(StatusCodes.FORBIDDEN, 'Only Owner and Admin can invite members in this workspace.')
+      }
     }
 
     // 1. Check xem user đã ở trong Workspace chưa?

@@ -9,30 +9,32 @@ var _regenerator = _interopRequireDefault(require("@babel/runtime/regenerator"))
 var _asyncToGenerator2 = _interopRequireDefault(require("@babel/runtime/helpers/asyncToGenerator"));
 var _httpStatusCodes = require("http-status-codes");
 var _workspaceService = require("../services/workspaceService");
+var _ApiError = _interopRequireDefault(require("../utils/ApiError"));
 var createNew = /*#__PURE__*/function () {
   var _ref = (0, _asyncToGenerator2["default"])(/*#__PURE__*/_regenerator["default"].mark(function _callee(req, res, next) {
-    var userId, createdWorkspace;
+    var userId, email, createdWorkspace;
     return _regenerator["default"].wrap(function _callee$(_context) {
       while (1) switch (_context.prev = _context.next) {
         case 0:
           _context.prev = 0;
           userId = req.jwtDecoded._id;
-          _context.next = 4;
-          return _workspaceService.workspaceService.createNew(userId, req.body);
-        case 4:
+          email = req.jwtDecoded.email;
+          _context.next = 5;
+          return _workspaceService.workspaceService.createNew(userId, email, req.body);
+        case 5:
           createdWorkspace = _context.sent;
           res.status(_httpStatusCodes.StatusCodes.CREATED).json(createdWorkspace);
-          _context.next = 11;
+          _context.next = 12;
           break;
-        case 8:
-          _context.prev = 8;
+        case 9:
+          _context.prev = 9;
           _context.t0 = _context["catch"](0);
           next(_context.t0);
-        case 11:
+        case 12:
         case "end":
           return _context.stop();
       }
-    }, _callee, null, [[0, 8]]);
+    }, _callee, null, [[0, 9]]);
   }));
   return function createNew(_x, _x2, _x3) {
     return _ref.apply(this, arguments);
@@ -168,7 +170,7 @@ var inviteMember = /*#__PURE__*/function () {
           return _workspaceService.workspaceService.inviteMember(inviterId, workspaceId, req.body);
         case 5:
           result = _context6.sent;
-          res.status(_httpStatusCodes.StatusCodes.CREATED).json(result);
+          res.status(_httpStatusCodes.StatusCodes.OK).json(result);
           _context6.next = 12;
           break;
         case 9:
@@ -185,40 +187,46 @@ var inviteMember = /*#__PURE__*/function () {
     return _ref6.apply(this, arguments);
   };
 }();
-var removeMember = /*#__PURE__*/function () {
+var acceptInvite = /*#__PURE__*/function () {
   var _ref7 = (0, _asyncToGenerator2["default"])(/*#__PURE__*/_regenerator["default"].mark(function _callee7(req, res, next) {
-    var actorUserId, workspaceId, targetUserId, result;
+    var userId, userEmail, _req$body, token, workspaceId, result;
     return _regenerator["default"].wrap(function _callee7$(_context7) {
       while (1) switch (_context7.prev = _context7.next) {
         case 0:
           _context7.prev = 0;
-          actorUserId = req.jwtDecoded._id;
-          workspaceId = req.params.id;
-          targetUserId = req.params.targetUserId;
-          _context7.next = 6;
-          return _workspaceService.workspaceService.removeMember(actorUserId, workspaceId, targetUserId);
+          userId = req.jwtDecoded._id;
+          userEmail = req.jwtDecoded.email;
+          _req$body = req.body, token = _req$body.token, workspaceId = _req$body.workspaceId;
+          if (!(!token || !workspaceId)) {
+            _context7.next = 6;
+            break;
+          }
+          throw new _ApiError["default"](_httpStatusCodes.StatusCodes.BAD_REQUEST, 'Token and workspaceId are required!');
         case 6:
+          _context7.next = 8;
+          return _workspaceService.workspaceService.acceptInvite(userId, userEmail, token, workspaceId);
+        case 8:
           result = _context7.sent;
           res.status(_httpStatusCodes.StatusCodes.OK).json(result);
-          _context7.next = 13;
+          _context7.next = 15;
           break;
-        case 10:
-          _context7.prev = 10;
+        case 12:
+          _context7.prev = 12;
           _context7.t0 = _context7["catch"](0);
           next(_context7.t0);
-        case 13:
+        case 15:
         case "end":
           return _context7.stop();
       }
-    }, _callee7, null, [[0, 10]]);
+    }, _callee7, null, [[0, 12]]);
   }));
-  return function removeMember(_x17, _x18, _x19) {
+  return function acceptInvite(_x17, _x18, _x19) {
     return _ref7.apply(this, arguments);
   };
 }();
-var updateMemberRole = /*#__PURE__*/function () {
+var removeMember = /*#__PURE__*/function () {
   var _ref8 = (0, _asyncToGenerator2["default"])(/*#__PURE__*/_regenerator["default"].mark(function _callee8(req, res, next) {
-    var actorUserId, workspaceId, targetUserId, role, result;
+    var actorUserId, workspaceId, targetUserId, result;
     return _regenerator["default"].wrap(function _callee8$(_context8) {
       while (1) switch (_context8.prev = _context8.next) {
         case 0:
@@ -226,85 +234,207 @@ var updateMemberRole = /*#__PURE__*/function () {
           actorUserId = req.jwtDecoded._id;
           workspaceId = req.params.id;
           targetUserId = req.params.targetUserId;
-          role = req.body.role;
-          _context8.next = 7;
-          return _workspaceService.workspaceService.updateMemberRole(actorUserId, workspaceId, targetUserId, role);
-        case 7:
+          _context8.next = 6;
+          return _workspaceService.workspaceService.removeMember(actorUserId, workspaceId, targetUserId);
+        case 6:
           result = _context8.sent;
           res.status(_httpStatusCodes.StatusCodes.OK).json(result);
-          _context8.next = 14;
+          _context8.next = 13;
           break;
-        case 11:
-          _context8.prev = 11;
+        case 10:
+          _context8.prev = 10;
           _context8.t0 = _context8["catch"](0);
           next(_context8.t0);
-        case 14:
+        case 13:
         case "end":
           return _context8.stop();
       }
-    }, _callee8, null, [[0, 11]]);
+    }, _callee8, null, [[0, 10]]);
   }));
-  return function updateMemberRole(_x20, _x21, _x22) {
+  return function removeMember(_x20, _x21, _x22) {
     return _ref8.apply(this, arguments);
   };
 }();
-var leaveWorkspace = /*#__PURE__*/function () {
+var updateMemberRole = /*#__PURE__*/function () {
   var _ref9 = (0, _asyncToGenerator2["default"])(/*#__PURE__*/_regenerator["default"].mark(function _callee9(req, res, next) {
-    var userId, workspaceId, result;
+    var actorUserId, workspaceId, targetUserId, role, result;
     return _regenerator["default"].wrap(function _callee9$(_context9) {
       while (1) switch (_context9.prev = _context9.next) {
         case 0:
           _context9.prev = 0;
-          userId = req.jwtDecoded._id;
+          actorUserId = req.jwtDecoded._id;
           workspaceId = req.params.id;
-          _context9.next = 5;
-          return _workspaceService.workspaceService.leaveWorkspace(userId, workspaceId);
-        case 5:
+          targetUserId = req.params.targetUserId;
+          role = req.body.role;
+          _context9.next = 7;
+          return _workspaceService.workspaceService.updateMemberRole(actorUserId, workspaceId, targetUserId, role);
+        case 7:
           result = _context9.sent;
           res.status(_httpStatusCodes.StatusCodes.OK).json(result);
-          _context9.next = 12;
+          _context9.next = 14;
           break;
-        case 9:
-          _context9.prev = 9;
+        case 11:
+          _context9.prev = 11;
           _context9.t0 = _context9["catch"](0);
           next(_context9.t0);
-        case 12:
+        case 14:
         case "end":
           return _context9.stop();
       }
-    }, _callee9, null, [[0, 9]]);
+    }, _callee9, null, [[0, 11]]);
   }));
-  return function leaveWorkspace(_x23, _x24, _x25) {
+  return function updateMemberRole(_x23, _x24, _x25) {
     return _ref9.apply(this, arguments);
   };
 }();
-var getMembers = /*#__PURE__*/function () {
+var leaveWorkspace = /*#__PURE__*/function () {
   var _ref0 = (0, _asyncToGenerator2["default"])(/*#__PURE__*/_regenerator["default"].mark(function _callee0(req, res, next) {
-    var workspaceId, members;
+    var userId, workspaceId, result;
     return _regenerator["default"].wrap(function _callee0$(_context0) {
       while (1) switch (_context0.prev = _context0.next) {
         case 0:
           _context0.prev = 0;
+          userId = req.jwtDecoded._id;
           workspaceId = req.params.id;
-          _context0.next = 4;
-          return _workspaceService.workspaceService.getMembers(workspaceId);
-        case 4:
-          members = _context0.sent;
-          res.status(_httpStatusCodes.StatusCodes.OK).json(members);
-          _context0.next = 11;
+          _context0.next = 5;
+          return _workspaceService.workspaceService.leaveWorkspace(userId, workspaceId);
+        case 5:
+          result = _context0.sent;
+          res.status(_httpStatusCodes.StatusCodes.OK).json(result);
+          _context0.next = 12;
           break;
-        case 8:
-          _context0.prev = 8;
+        case 9:
+          _context0.prev = 9;
           _context0.t0 = _context0["catch"](0);
           next(_context0.t0);
-        case 11:
+        case 12:
         case "end":
           return _context0.stop();
       }
-    }, _callee0, null, [[0, 8]]);
+    }, _callee0, null, [[0, 9]]);
   }));
-  return function getMembers(_x26, _x27, _x28) {
+  return function leaveWorkspace(_x26, _x27, _x28) {
     return _ref0.apply(this, arguments);
+  };
+}();
+var getMembers = /*#__PURE__*/function () {
+  var _ref1 = (0, _asyncToGenerator2["default"])(/*#__PURE__*/_regenerator["default"].mark(function _callee1(req, res, next) {
+    var workspaceId, members;
+    return _regenerator["default"].wrap(function _callee1$(_context1) {
+      while (1) switch (_context1.prev = _context1.next) {
+        case 0:
+          _context1.prev = 0;
+          workspaceId = req.params.id;
+          _context1.next = 4;
+          return _workspaceService.workspaceService.getMembers(workspaceId);
+        case 4:
+          members = _context1.sent;
+          res.status(_httpStatusCodes.StatusCodes.OK).json(members);
+          _context1.next = 11;
+          break;
+        case 8:
+          _context1.prev = 8;
+          _context1.t0 = _context1["catch"](0);
+          next(_context1.t0);
+        case 11:
+        case "end":
+          return _context1.stop();
+      }
+    }, _callee1, null, [[0, 8]]);
+  }));
+  return function getMembers(_x29, _x30, _x31) {
+    return _ref1.apply(this, arguments);
+  };
+}();
+var transferOwnership = /*#__PURE__*/function () {
+  var _ref10 = (0, _asyncToGenerator2["default"])(/*#__PURE__*/_regenerator["default"].mark(function _callee10(req, res, next) {
+    var actorUserId, workspaceId, targetUserId, result;
+    return _regenerator["default"].wrap(function _callee10$(_context10) {
+      while (1) switch (_context10.prev = _context10.next) {
+        case 0:
+          _context10.prev = 0;
+          actorUserId = req.jwtDecoded._id;
+          workspaceId = req.params.id;
+          targetUserId = req.body.targetUserId;
+          _context10.next = 6;
+          return _workspaceService.workspaceService.transferOwnership(actorUserId, workspaceId, targetUserId);
+        case 6:
+          result = _context10.sent;
+          res.status(_httpStatusCodes.StatusCodes.OK).json(result);
+          _context10.next = 13;
+          break;
+        case 10:
+          _context10.prev = 10;
+          _context10.t0 = _context10["catch"](0);
+          next(_context10.t0);
+        case 13:
+        case "end":
+          return _context10.stop();
+      }
+    }, _callee10, null, [[0, 10]]);
+  }));
+  return function transferOwnership(_x32, _x33, _x34) {
+    return _ref10.apply(this, arguments);
+  };
+}();
+var updateLogo = /*#__PURE__*/function () {
+  var _ref11 = (0, _asyncToGenerator2["default"])(/*#__PURE__*/_regenerator["default"].mark(function _callee11(req, res, next) {
+    var workspaceId, logoFile, result;
+    return _regenerator["default"].wrap(function _callee11$(_context11) {
+      while (1) switch (_context11.prev = _context11.next) {
+        case 0:
+          _context11.prev = 0;
+          workspaceId = req.params.id;
+          logoFile = req.file;
+          _context11.next = 5;
+          return _workspaceService.workspaceService.updateLogo(workspaceId, logoFile);
+        case 5:
+          result = _context11.sent;
+          res.status(_httpStatusCodes.StatusCodes.OK).json(result);
+          _context11.next = 12;
+          break;
+        case 9:
+          _context11.prev = 9;
+          _context11.t0 = _context11["catch"](0);
+          next(_context11.t0);
+        case 12:
+        case "end":
+          return _context11.stop();
+      }
+    }, _callee11, null, [[0, 9]]);
+  }));
+  return function updateLogo(_x35, _x36, _x37) {
+    return _ref11.apply(this, arguments);
+  };
+}();
+var updateNotificationPrefs = /*#__PURE__*/function () {
+  var _ref12 = (0, _asyncToGenerator2["default"])(/*#__PURE__*/_regenerator["default"].mark(function _callee12(req, res, next) {
+    var userId, workspaceId, result;
+    return _regenerator["default"].wrap(function _callee12$(_context12) {
+      while (1) switch (_context12.prev = _context12.next) {
+        case 0:
+          _context12.prev = 0;
+          userId = req.jwtDecoded._id;
+          workspaceId = req.params.id;
+          _context12.next = 5;
+          return _workspaceService.workspaceService.updateNotificationPrefs(userId, workspaceId, req.body);
+        case 5:
+          result = _context12.sent;
+          res.status(_httpStatusCodes.StatusCodes.OK).json(result);
+          _context12.next = 12;
+          break;
+        case 9:
+          _context12.prev = 9;
+          _context12.t0 = _context12["catch"](0);
+          next(_context12.t0);
+        case 12:
+        case "end":
+          return _context12.stop();
+      }
+    }, _callee12, null, [[0, 9]]);
+  }));
+  return function updateNotificationPrefs(_x38, _x39, _x40) {
+    return _ref12.apply(this, arguments);
   };
 }();
 var workspaceController = {
@@ -314,9 +444,13 @@ var workspaceController = {
   deleteItem: deleteItem,
   update: update,
   inviteMember: inviteMember,
+  acceptInvite: acceptInvite,
   removeMember: removeMember,
   updateMemberRole: updateMemberRole,
   leaveWorkspace: leaveWorkspace,
-  getMembers: getMembers
+  getMembers: getMembers,
+  transferOwnership: transferOwnership,
+  updateLogo: updateLogo,
+  updateNotificationPrefs: updateNotificationPrefs
 };
 exports.workspaceController = workspaceController;

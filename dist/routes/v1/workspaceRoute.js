@@ -10,6 +10,7 @@ var _workspaceController = require("../../controllers/workspaceController");
 var _authMiddleware = require("../../middlewares/authMiddleware");
 var _rbacMiddleware = require("../../middlewares/rbacMiddleware");
 var _workspaceValidation = require("../../validations/workspaceValidation");
+var _multerUploadMiddleware = require("../../middlewares/multerUploadMiddleware");
 var _constants = require("../../utils/constants");
 var Router = _express["default"].Router();
 var OWNER = _constants.WORKSPACE_ROLES.OWNER,
@@ -23,6 +24,9 @@ var OWNER = _constants.WORKSPACE_ROLES.OWNER,
 // Lấy danh sách workspaces của user đang đăng nhập
 Router.route('/').get(_authMiddleware.authMiddleware.isAuthorized, _workspaceController.workspaceController.getWorkspacesByUserId).post(_authMiddleware.authMiddleware.isAuthorized, _workspaceValidation.workspaceValidation.createNew, _workspaceController.workspaceController.createNew);
 
+// Accept invite (user clicks link in email)
+Router.route('/accept-invite').put(_authMiddleware.authMiddleware.isAuthorized, _workspaceController.workspaceController.acceptInvite);
+
 // =============================================
 // Routes CẦN workspace role check (RBAC)
 // =============================================
@@ -31,8 +35,8 @@ Router.route('/').get(_authMiddleware.authMiddleware.isAuthorized, _workspaceCon
 Router.route('/:id')
 // Mọi member đều xem được workspace details
 .get(_authMiddleware.authMiddleware.isAuthorized, (0, _rbacMiddleware.requireWorkspaceRole)([OWNER, ADMIN, MEMBER]), _workspaceController.workspaceController.getDetails)
-// Chỉ Owner + Admin sửa workspace (đổi tên, mô tả)
-.put(_authMiddleware.authMiddleware.isAuthorized, (0, _rbacMiddleware.requireWorkspaceRole)([OWNER, ADMIN]), _workspaceValidation.workspaceValidation.update, _workspaceController.workspaceController.update)
+// Chỉ Owner sửa workspace (đổi tên, mô tả)
+.put(_authMiddleware.authMiddleware.isAuthorized, (0, _rbacMiddleware.requireWorkspaceRole)([OWNER]), _workspaceValidation.workspaceValidation.update, _workspaceController.workspaceController.update)
 // Chỉ Owner xóa workspace
 ["delete"](_authMiddleware.authMiddleware.isAuthorized, (0, _rbacMiddleware.requireWorkspaceRole)([OWNER]), _workspaceController.workspaceController.deleteItem);
 
@@ -40,8 +44,8 @@ Router.route('/:id')
 Router.route('/:id/members')
 // Mọi member đều xem được danh sách members
 .get(_authMiddleware.authMiddleware.isAuthorized, (0, _rbacMiddleware.requireWorkspaceRole)([OWNER, ADMIN, MEMBER]), _workspaceController.workspaceController.getMembers)
-// Chỉ Owner + Admin mời member mới
-.post(_authMiddleware.authMiddleware.isAuthorized, (0, _rbacMiddleware.requireWorkspaceRole)([OWNER, ADMIN]), _workspaceValidation.workspaceValidation.inviteMember, _workspaceController.workspaceController.inviteMember);
+// Owner + Admin luôn invite được. Member: phụ thuộc workspace.invitePermission (enforce ở service)
+.post(_authMiddleware.authMiddleware.isAuthorized, (0, _rbacMiddleware.requireWorkspaceRole)([OWNER, ADMIN, MEMBER]), _workspaceValidation.workspaceValidation.inviteMember, _workspaceController.workspaceController.inviteMember);
 
 // Cập nhật role hoặc kick member cụ thể
 Router.route('/:id/members/:targetUserId')
@@ -52,5 +56,14 @@ Router.route('/:id/members/:targetUserId')
 
 // Tự rời workspace (mọi member đều dùng được)
 Router.route('/:id/leave').post(_authMiddleware.authMiddleware.isAuthorized, (0, _rbacMiddleware.requireWorkspaceRole)([OWNER, ADMIN, MEMBER]), _workspaceController.workspaceController.leaveWorkspace);
+
+// Chuyển quyền sở hữu (chỉ Owner)
+Router.route('/:id/transfer-ownership').post(_authMiddleware.authMiddleware.isAuthorized, (0, _rbacMiddleware.requireWorkspaceRole)([OWNER]), _workspaceValidation.workspaceValidation.transferOwnership, _workspaceController.workspaceController.transferOwnership);
+
+// Upload / cập nhật logo workspace (chỉ Owner)
+Router.route('/:id/logo').put(_authMiddleware.authMiddleware.isAuthorized, (0, _rbacMiddleware.requireWorkspaceRole)([OWNER]), _multerUploadMiddleware.multerUploadMiddleware.upload.single('logo'), _workspaceController.workspaceController.updateLogo);
+
+// Cập nhật tuỳ chọn thông báo cá nhân (mọi member đều chỉnh prefs của chính mình)
+Router.route('/:id/notifications').put(_authMiddleware.authMiddleware.isAuthorized, (0, _rbacMiddleware.requireWorkspaceRole)([OWNER, ADMIN, MEMBER]), _workspaceValidation.workspaceValidation.updateNotificationPrefs, _workspaceController.workspaceController.updateNotificationPrefs);
 var workspaceRoute = Router;
 exports.workspaceRoute = workspaceRoute;

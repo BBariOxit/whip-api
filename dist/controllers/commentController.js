@@ -9,6 +9,7 @@ var _regenerator = _interopRequireDefault(require("@babel/runtime/regenerator"))
 var _asyncToGenerator2 = _interopRequireDefault(require("@babel/runtime/helpers/asyncToGenerator"));
 var _httpStatusCodes = require("http-status-codes");
 var _commentService = require("../services/commentService");
+var _notificationService = require("../services/notificationService");
 var createNew = /*#__PURE__*/function () {
   var _ref = (0, _asyncToGenerator2["default"])(/*#__PURE__*/_regenerator["default"].mark(function _callee(req, res, next) {
     var createdComment, io;
@@ -24,17 +25,26 @@ var createNew = /*#__PURE__*/function () {
           io = req.app.get('socketio');
           io.to("card:".concat(createdComment.cardId.toString())).emit('BE_NEW_COMMENT', createdComment);
           res.status(_httpStatusCodes.StatusCodes.CREATED).json(createdComment);
-          _context.next = 12;
+
+          // Thông báo @mention (in-app) cho member được nhắc tên — best-effort, không chặn response
+          _notificationService.notificationService.notifyMentions({
+            io: io,
+            cardId: createdComment.cardId.toString(),
+            actorId: req.jwtDecoded._id,
+            actorName: createdComment.userDisplayName,
+            content: createdComment.content
+          });
+          _context.next = 13;
           break;
-        case 9:
-          _context.prev = 9;
+        case 10:
+          _context.prev = 10;
           _context.t0 = _context["catch"](0);
           next(_context.t0);
-        case 12:
+        case 13:
         case "end":
           return _context.stop();
       }
-    }, _callee, null, [[0, 9]]);
+    }, _callee, null, [[0, 10]]);
   }));
   return function createNew(_x, _x2, _x3) {
     return _ref.apply(this, arguments);

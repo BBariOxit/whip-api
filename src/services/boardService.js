@@ -9,12 +9,28 @@ import { userModel } from '~/models/userModel'
 import ApiError from '~/utils/ApiError'
 import { StatusCodes } from 'http-status-codes'
 import { OBJECT_ID_RULE } from '~/utils/validators'
-import { DEFAULT_PAGE, DEFAULT_ITEMS_PER_PAGE } from '~/utils/constants'
+import { DEFAULT_PAGE, DEFAULT_ITEMS_PER_PAGE, WORKSPACE_ROLES } from '~/utils/constants'
+import { workspaceModel } from '~/models/workspaceModel'
 import { ObjectId } from 'mongodb'
 import { getBoardAccessRole } from '~/middlewares/rbacMiddleware'
 
 const createNew = async (userId, reqBody) => {
   try {
+    // Enforce workspace boardCreation setting (chỉ áp dụng khi board thuộc workspace)
+    if (reqBody.workspaceId) {
+      const workspace = await workspaceModel.findById(reqBody.workspaceId)
+      if (!workspace) throw new ApiError(StatusCodes.NOT_FOUND, 'Workspace not found!')
+
+      const actor = workspace.members.find(m => m.userId?.toString() === userId.toString() && m.status === 'active')
+      if (!actor) throw new ApiError(StatusCodes.FORBIDDEN, 'You are not a member of this workspace!')
+
+      // boardCreation = 'admin' → chỉ Owner + Admin tạo board
+      // boardCreation = 'all' (default) → tất cả member đều tạo được
+      if (workspace.boardCreation !== 'all' && actor.role === WORKSPACE_ROLES.MEMBER) {
+        throw new ApiError(StatusCodes.FORBIDDEN, 'Only Owner and Admin can create boards in this workspace.')
+      }
+    }
+
     // xử lý logic dữ liệu
     const newBoard = {
       ...reqBody,
@@ -188,11 +204,21 @@ const getBoards = async (userId, page, itemsPerPage, queryFilters, sortOption) =
   } catch (error) { throw error }
 }
 
-const deleteItem = async (boardId) => {
+const deleteItem = async (boardId, actorBoardRole) => {
   try {
     const targetBoard = await boardModel.findOneById(boardId)
     if (!targetBoard) {
       throw new ApiError(StatusCodes.NOT_FOUND, 'Board not found!')
+    }
+
+    // Enforce workspace boardDeletion setting:
+    // Nếu user chỉ là 'member' (board role), phải check workspace.boardDeletion có = 'all' không
+    // Admin (board role) luôn được xóa bất kể setting
+    if (actorBoardRole === 'member' && targetBoard.workspaceId) {
+      const workspace = await workspaceModel.findById(targetBoard.workspaceId.toString())
+      if (!workspace || workspace.boardDeletion !== 'all') {
+        throw new ApiError(StatusCodes.FORBIDDEN, 'Only Owner and Admin can delete boards in this workspace.')
+      }
     }
 
     // Xoá board
@@ -231,31 +257,43 @@ const bulkDeleteItems = async (userId, boardIds) => {
       ownerIds: { $all: [new ObjectId(userId)] }
     }).toArray()
 
-    const validBoardIds = boardsToDelete.map(b => b._id)
+    // Enforce workspace boardDeletion setting cho từng board
+    // Lọc ra những board mà user thực sự được phép xóa
+    const allowedBoardIds = []
+    for (const board of boardsToDelete) {
+      if (board.workspaceId) {
+        const workspace = await workspaceModel.findById(board.workspaceId.toString())
+        // Nếu user là board owner (ownerIds) thì luôn được xóa (vì họ là admin của board)
+        // bulkDelete đã filter ownerIds rồi nên đến được đây đều là board admin → luôn cho phép
+        allowedBoardIds.push(board._id)
+      } else {
+        allowedBoardIds.push(board._id)
+      }
+    }
 
-    if (validBoardIds.length > 0) {
+    if (allowedBoardIds.length > 0) {
       // Delete boards
       await db.collection(boardModel.BOARD_COLLECTION_NAME).deleteMany({
-        _id: { $in: validBoardIds }
+        _id: { $in: allowedBoardIds }
       })
 
       // Delete columns
       await db.collection(columnModel.COLUMN_COLLECTION_NAME).deleteMany({
-        boardId: { $in: validBoardIds }
+        boardId: { $in: allowedBoardIds }
       })
 
       // Delete cards
       await db.collection(cardModel.CARD_COLLECTION_NAME).deleteMany({
-        boardId: { $in: validBoardIds }
+        boardId: { $in: allowedBoardIds }
       })
 
       // Delete labels
       await db.collection(labelModel.LABEL_COLLECTION_NAME).deleteMany({
-        boardId: { $in: validBoardIds }
+        boardId: { $in: allowedBoardIds }
       })
     }
 
-    return { deleteResult: `Successfully deleted ${validBoardIds.length} boards!` }
+    return { deleteResult: `Successfully deleted ${allowedBoardIds.length} boards!` }
   } catch (error) {
     throw error
   }

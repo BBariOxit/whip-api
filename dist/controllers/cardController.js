@@ -9,6 +9,7 @@ var _regenerator = _interopRequireDefault(require("@babel/runtime/regenerator"))
 var _asyncToGenerator2 = _interopRequireDefault(require("@babel/runtime/helpers/asyncToGenerator"));
 var _httpStatusCodes = require("http-status-codes");
 var _cardService = require("../services/cardService");
+var _notificationService = require("../services/notificationService");
 var createNew = /*#__PURE__*/function () {
   var _ref = (0, _asyncToGenerator2["default"])(/*#__PURE__*/_regenerator["default"].mark(function _callee(req, res, next) {
     var createCard;
@@ -21,17 +22,27 @@ var createNew = /*#__PURE__*/function () {
         case 3:
           createCard = _context.sent;
           res.status(_httpStatusCodes.StatusCodes.CREATED).json(createCard);
-          _context.next = 10;
+
+          // Thông báo "board activity" (in-app) cho các thành viên board — best-effort, không chặn response
+          if (createCard !== null && createCard !== void 0 && createCard.boardId) {
+            _notificationService.notificationService.notifyBoardActivity({
+              io: req.app.get('socketio'),
+              boardId: createCard.boardId.toString(),
+              actorId: req.jwtDecoded._id,
+              detail: "added the card \"".concat(createCard.title, "\"")
+            });
+          }
+          _context.next = 11;
           break;
-        case 7:
-          _context.prev = 7;
+        case 8:
+          _context.prev = 8;
           _context.t0 = _context["catch"](0);
           next(_context.t0);
-        case 10:
+        case 11:
         case "end":
           return _context.stop();
       }
-    }, _callee, null, [[0, 7]]);
+    }, _callee, null, [[0, 8]]);
   }));
   return function createNew(_x, _x2, _x3) {
     return _ref.apply(this, arguments);
@@ -39,28 +50,29 @@ var createNew = /*#__PURE__*/function () {
 }();
 var duplicateCard = /*#__PURE__*/function () {
   var _ref2 = (0, _asyncToGenerator2["default"])(/*#__PURE__*/_regenerator["default"].mark(function _callee2(req, res, next) {
-    var _req$body, cardId, targetColumnId, newCard;
+    var userId, _req$body, cardId, targetColumnId, newCard;
     return _regenerator["default"].wrap(function _callee2$(_context2) {
       while (1) switch (_context2.prev = _context2.next) {
         case 0:
           _context2.prev = 0;
+          userId = req.jwtDecoded._id;
           _req$body = req.body, cardId = _req$body.cardId, targetColumnId = _req$body.targetColumnId;
-          _context2.next = 4;
-          return _cardService.cardService.duplicateCard(cardId, targetColumnId);
-        case 4:
+          _context2.next = 5;
+          return _cardService.cardService.duplicateCard(cardId, targetColumnId, userId);
+        case 5:
           newCard = _context2.sent;
           res.status(_httpStatusCodes.StatusCodes.CREATED).json(newCard);
-          _context2.next = 11;
+          _context2.next = 12;
           break;
-        case 8:
-          _context2.prev = 8;
+        case 9:
+          _context2.prev = 9;
           _context2.t0 = _context2["catch"](0);
           next(_context2.t0);
-        case 11:
+        case 12:
         case "end":
           return _context2.stop();
       }
-    }, _callee2, null, [[0, 8]]);
+    }, _callee2, null, [[0, 9]]);
   }));
   return function duplicateCard(_x4, _x5, _x6) {
     return _ref2.apply(this, arguments);
@@ -173,17 +185,27 @@ var deleteItem = /*#__PURE__*/function () {
         case 5:
           result = _context6.sent;
           res.status(_httpStatusCodes.StatusCodes.OK).json(result);
-          _context6.next = 12;
+
+          // Thông báo "board activity" (in-app) cho thành viên board — best-effort, không chặn response
+          if (result !== null && result !== void 0 && result.boardId) {
+            _notificationService.notificationService.notifyBoardActivity({
+              io: req.app.get('socketio'),
+              boardId: result.boardId.toString(),
+              actorId: userInfo._id,
+              detail: "deleted the card \"".concat(result.cardTitle, "\"")
+            });
+          }
+          _context6.next = 13;
           break;
-        case 9:
-          _context6.prev = 9;
+        case 10:
+          _context6.prev = 10;
           _context6.t0 = _context6["catch"](0);
           next(_context6.t0);
-        case 12:
+        case 13:
         case "end":
           return _context6.stop();
       }
-    }, _callee6, null, [[0, 9]]);
+    }, _callee6, null, [[0, 10]]);
   }));
   return function deleteItem(_x14, _x15, _x16) {
     return _ref6.apply(this, arguments);
@@ -203,17 +225,27 @@ var archiveCard = /*#__PURE__*/function () {
         case 5:
           result = _context7.sent;
           res.status(_httpStatusCodes.StatusCodes.OK).json(result);
-          _context7.next = 12;
+
+          // Thông báo "board activity" (in-app) cho thành viên board — best-effort, không chặn response
+          if (result !== null && result !== void 0 && result.boardId) {
+            _notificationService.notificationService.notifyBoardActivity({
+              io: req.app.get('socketio'),
+              boardId: result.boardId.toString(),
+              actorId: userInfo._id,
+              detail: "archived the card \"".concat(result.cardTitle, "\"")
+            });
+          }
+          _context7.next = 13;
           break;
-        case 9:
-          _context7.prev = 9;
+        case 10:
+          _context7.prev = 10;
           _context7.t0 = _context7["catch"](0);
           next(_context7.t0);
-        case 12:
+        case 13:
         case "end":
           return _context7.stop();
       }
-    }, _callee7, null, [[0, 9]]);
+    }, _callee7, null, [[0, 10]]);
   }));
   return function archiveCard(_x17, _x18, _x19) {
     return _ref7.apply(this, arguments);

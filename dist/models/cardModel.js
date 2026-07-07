@@ -65,7 +65,8 @@ var CARD_COLLECTION_SCHEMA = _joi["default"].object({
 });
 
 // chỉ định ra những field mà chúng ta ko muốn cho phép cập nhật trong hàm update
-var INVALID_UPDATE_FIELDS = ['_id', 'boardId', 'createdAt'];
+// (memberIds/attachments/totalComments/isTemplate/_destroy đều có method riêng — chặn mass-assignment)
+var INVALID_UPDATE_FIELDS = ['_id', 'boardId', 'createdAt', '_destroy', 'isTemplate', 'totalComments', 'attachments', 'memberIds'];
 var validateBeforeCreate = /*#__PURE__*/function () {
   var _ref = (0, _asyncToGenerator2["default"])(/*#__PURE__*/_regenerator["default"].mark(function _callee(data) {
     return _regenerator["default"].wrap(function _callee$(_context) {
@@ -159,7 +160,7 @@ var update = /*#__PURE__*/function () {
           // lọc những cái field mà chúng ta ko cho phép cập nhật linh tinh
           Object.keys(updateData).forEach(function (fieldName) {
             if (INVALID_UPDATE_FIELDS.includes(fieldName)) {
-              delete updateData(fieldName);
+              delete updateData[fieldName];
             }
           });
 

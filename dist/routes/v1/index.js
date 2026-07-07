@@ -17,6 +17,7 @@ var _activityRoute = require("./activityRoute");
 var _customFieldRoute = require("./customFieldRoute");
 var _commentRoute = require("./commentRoute");
 var _workspaceRoute = require("./workspaceRoute");
+var _notificationRoute = require("./notificationRoute");
 var Router = _express["default"].Router();
 //check APIs v1/status
 Router.get('/status', function (req, res) {
@@ -48,5 +49,8 @@ Router.use('/comments', _commentRoute.commentRouter);
 
 // Workspace APIs
 Router.use('/workspaces', _workspaceRoute.workspaceRoute);
+
+// Notification APIs
+Router.use('/notifications', _notificationRoute.notificationRoute);
 var APIs_V1 = Router;
 exports.APIs_V1 = APIs_V1;

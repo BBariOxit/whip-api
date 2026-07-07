@@ -22,7 +22,7 @@ function ownKeys(e, r) { var t = Object.keys(e); if (Object.getOwnPropertySymbol
 function _objectSpread(e) { for (var r = 1; r < arguments.length; r++) { var t = null != arguments[r] ? arguments[r] : {}; r % 2 ? ownKeys(Object(t), !0).forEach(function (r) { (0, _defineProperty2["default"])(e, r, t[r]); }) : Object.getOwnPropertyDescriptors ? Object.defineProperties(e, Object.getOwnPropertyDescriptors(t)) : ownKeys(Object(t)).forEach(function (r) { Object.defineProperty(e, r, Object.getOwnPropertyDescriptor(t, r)); }); } return e; }
 var createNew = /*#__PURE__*/function () {
   var _ref = (0, _asyncToGenerator2["default"])(/*#__PURE__*/_regenerator["default"].mark(function _callee(reqBody) {
-    var existUser, nameFromEmail, newUser, createdUser, getNewUser, verificationLink, customSubject, customHTMLContent;
+    var existUser, nameFromEmail, defaultAvatar, newUser, createdUser, getNewUser, verificationLink, customSubject, customHTMLContent;
     return _regenerator["default"].wrap(function _callee$(_context) {
       while (1) switch (_context.prev = _context.next) {
         case 0:
@@ -39,7 +39,8 @@ var createNew = /*#__PURE__*/function () {
         case 6:
           // tạo data để lưu vào db
           // phần trước dấu @ là tên của người dùng. vd: phanbao@gmail.com -> nameFromEmail = phanbao
-          nameFromEmail = reqBody.email.split('@')[0];
+          nameFromEmail = reqBody.email.split('@')[0]; // Gắn avatar mặc định từ ui-avatars.com
+          defaultAvatar = "https://ui-avatars.com/api/?name=".concat(encodeURIComponent(nameFromEmail), "&background=random&color=fff");
           newUser = {
             email: reqBody.email,
             password: _bcryptjs["default"].hashSync(reqBody.password, 8),
@@ -47,33 +48,35 @@ var createNew = /*#__PURE__*/function () {
             username: nameFromEmail,
             // sẽ hiện thị ra tên người dùng (ví dụ: khi đăng ký tài khoản phanbao@gmail.com thì hiển thị username là phanbao và displayName là phanbao)
             displayName: nameFromEmail,
+            avatar: defaultAvatar,
+            // Thêm avatar
             verifyToken: (0, _uuid.v4)() // tạo mã token xác thực
           }; // thực hiện lưu thông tin user vào db
-          _context.next = 10;
+          _context.next = 11;
           return _userModel.userModel.createNew(newUser);
-        case 10:
+        case 11:
           createdUser = _context.sent;
-          _context.next = 13;
+          _context.next = 14;
           return _userModel.userModel.findOneById(createdUser.insertedId);
-        case 13:
+        case 14:
           getNewUser = _context.sent;
           // Link xác thực tài khoản
           verificationLink = "".concat(_environment.env.BUILD_MODE === 'dev' ? _environment.env.WEBSITE_DOMAIN_DEVELOPMENT : _environment.env.WEBSITE_DOMAIN_PRODUCTION, "/account/verification?email=").concat(getNewUser.email, "&token=").concat(getNewUser.verifyToken); // Tiêu đề email
           customSubject = 'Confirm your account - Whip App'; // Nội dung email
           customHTMLContent = "\n      <h3>Welcome to Whip App!</h3>\n      <p>Please click the link below to verify your account:</p>\n      <a href=\"".concat(verificationLink, "\">Verify Account</a>"); // gửi email cho người dùng xác thực tài khoản
-          _context.next = 19;
+          _context.next = 20;
           return _brevoProvider.brevoProvider.sendEmail(getNewUser.email, customSubject, customHTMLContent);
-        case 19:
+        case 20:
           return _context.abrupt("return", (0, _formatter.pickUser)(getNewUser));
-        case 22:
-          _context.prev = 22;
+        case 23:
+          _context.prev = 23;
           _context.t0 = _context["catch"](0);
           throw _context.t0;
-        case 25:
+        case 26:
         case "end":
           return _context.stop();
       }
-    }, _callee, null, [[0, 22]]);
+    }, _callee, null, [[0, 23]]);
   }));
   return function createNew(_x) {
     return _ref.apply(this, arguments);
@@ -165,7 +168,9 @@ var login = /*#__PURE__*/function () {
           // tạo thông tin sẽ đính kèm trong JWT Token bao gồm _id và email của user
           userInfo = {
             _id: existUser._id,
-            email: existUser.email
+            email: existUser.email,
+            avatar: existUser.avatar,
+            displayName: existUser.displayName
           }; // Tạo ra 2 loại token, accessToken và refreshToken để trả về cho phía FE
           _context3.next = 13;
           return _JwtProvider.jwtProvider.generateToken(userInfo, _environment.env.ACCESS_TOKEN_SECRET_SIGNATURE, _environment.env.ACCESS_TOKEN_LIFE
@@ -211,7 +216,9 @@ var refreshToken = /*#__PURE__*/function () {
           // Đoạn này vì chúng ta chỉ lưu những thông tin unique và cố định của user trong token rồi, vì vậy có thể lấy luôn từ decoded ra, tiết kiệm query vào DB để lấy data mới.
           userInfo = {
             _id: refreshTokenDecoded._id,
-            email: refreshTokenDecoded.email
+            email: refreshTokenDecoded.email,
+            avatar: refreshTokenDecoded.avatar,
+            displayName: refreshTokenDecoded.displayName
           }; // Tạo accessToken mới
           _context4.next = 7;
           return _JwtProvider.jwtProvider.generateToken(userInfo, _environment.env.ACCESS_TOKEN_SECRET_SIGNATURE,
@@ -332,7 +339,9 @@ var _generateTokensForOAuthUser = /*#__PURE__*/function () {
         case 0:
           userInfo = {
             _id: user._id,
-            email: user.email
+            email: user.email,
+            avatar: user.avatar,
+            displayName: user.displayName
           };
           _context6.next = 3;
           return _JwtProvider.jwtProvider.generateToken(userInfo, _environment.env.ACCESS_TOKEN_SECRET_SIGNATURE, _environment.env.ACCESS_TOKEN_LIFE);

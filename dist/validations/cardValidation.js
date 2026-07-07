@@ -57,7 +57,7 @@ var update = /*#__PURE__*/function () {
           correctCondition = _joi["default"].object({
             title: _joi["default"].string().min(3).max(50).trim().strict(),
             size: _joi["default"].string().valid('compact', 'standard', 'detailed').optional(),
-            description: _joi["default"].string().optional()
+            description: _joi["default"].string().max(10000).allow('').optional()
           });
           _context2.prev = 1;
           _context2.next = 4;
