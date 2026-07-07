@@ -112,18 +112,14 @@ var update = /*#__PURE__*/function () {
     return _ref2.apply(this, arguments);
   };
 }();
-var moveCardifferentColumn = /*#__PURE__*/function () {
+var cloneTemplate = /*#__PURE__*/function () {
   var _ref3 = (0, _asyncToGenerator2["default"])(/*#__PURE__*/_regenerator["default"].mark(function _callee3(req, res, next) {
     var correctCondition, errorMessage, customError;
     return _regenerator["default"].wrap(function _callee3$(_context3) {
       while (1) switch (_context3.prev = _context3.next) {
         case 0:
           correctCondition = _joi["default"].object({
-            currCardId: _joi["default"].string().required().pattern(_validators.OBJECT_ID_RULE).message(_validators.OBJECT_ID_RULE_MESSAGE),
-            prevColumnId: _joi["default"].string().required().pattern(_validators.OBJECT_ID_RULE).message(_validators.OBJECT_ID_RULE_MESSAGE),
-            prevCardOrderIds: _joi["default"].array().required().items(_joi["default"].string().pattern(_validators.OBJECT_ID_RULE).message(_validators.OBJECT_ID_RULE_MESSAGE)),
-            nextColumnId: _joi["default"].string().required().pattern(_validators.OBJECT_ID_RULE).message(_validators.OBJECT_ID_RULE_MESSAGE),
-            nexCardOrderIds: _joi["default"].array().required().items(_joi["default"].string().pattern(_validators.OBJECT_ID_RULE).message(_validators.OBJECT_ID_RULE_MESSAGE))
+            templateBoardId: _joi["default"].string().required().pattern(_validators.OBJECT_ID_RULE).message(_validators.OBJECT_ID_RULE_MESSAGE)
           });
           _context3.prev = 1;
           _context3.next = 4;
@@ -146,13 +142,52 @@ var moveCardifferentColumn = /*#__PURE__*/function () {
       }
     }, _callee3, null, [[1, 7]]);
   }));
-  return function moveCardifferentColumn(_x7, _x8, _x9) {
+  return function cloneTemplate(_x7, _x8, _x9) {
     return _ref3.apply(this, arguments);
+  };
+}();
+var moveCardifferentColumn = /*#__PURE__*/function () {
+  var _ref4 = (0, _asyncToGenerator2["default"])(/*#__PURE__*/_regenerator["default"].mark(function _callee4(req, res, next) {
+    var correctCondition, errorMessage, customError;
+    return _regenerator["default"].wrap(function _callee4$(_context4) {
+      while (1) switch (_context4.prev = _context4.next) {
+        case 0:
+          correctCondition = _joi["default"].object({
+            currCardId: _joi["default"].string().required().pattern(_validators.OBJECT_ID_RULE).message(_validators.OBJECT_ID_RULE_MESSAGE),
+            prevColumnId: _joi["default"].string().required().pattern(_validators.OBJECT_ID_RULE).message(_validators.OBJECT_ID_RULE_MESSAGE),
+            prevCardOrderIds: _joi["default"].array().required().items(_joi["default"].string().pattern(_validators.OBJECT_ID_RULE).message(_validators.OBJECT_ID_RULE_MESSAGE)),
+            nextColumnId: _joi["default"].string().required().pattern(_validators.OBJECT_ID_RULE).message(_validators.OBJECT_ID_RULE_MESSAGE),
+            nexCardOrderIds: _joi["default"].array().required().items(_joi["default"].string().pattern(_validators.OBJECT_ID_RULE).message(_validators.OBJECT_ID_RULE_MESSAGE))
+          });
+          _context4.prev = 1;
+          _context4.next = 4;
+          return correctCondition.validateAsync(req.body, {
+            abortEarly: false
+          });
+        case 4:
+          next();
+          _context4.next = 12;
+          break;
+        case 7:
+          _context4.prev = 7;
+          _context4.t0 = _context4["catch"](1);
+          errorMessage = new Error(_context4.t0).message;
+          customError = new _ApiError["default"](_httpStatusCodes.StatusCodes.UNPROCESSABLE_ENTITY, errorMessage);
+          next(customError);
+        case 12:
+        case "end":
+          return _context4.stop();
+      }
+    }, _callee4, null, [[1, 7]]);
+  }));
+  return function moveCardifferentColumn(_x0, _x1, _x10) {
+    return _ref4.apply(this, arguments);
   };
 }();
 var boardValidation = {
   createNew: createNew,
   update: update,
+  cloneTemplate: cloneTemplate,
   moveCardifferentColumn: moveCardifferentColumn
 };
 exports.boardValidation = boardValidation;

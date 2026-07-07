@@ -55,13 +55,17 @@ var update = /*#__PURE__*/function () {
         case 0:
           correctCondition = _joi["default"].object({
             title: _joi["default"].string().min(3).max(30).trim().strict(),
-            description: _joi["default"].string().max(255).trim().strict().allow('')
+            description: _joi["default"].string().max(255).trim().strict().allow(''),
+            visibility: _joi["default"].string().valid('private', 'public'),
+            invitePermission: _joi["default"].string().valid('admin', 'all'),
+            boardCreation: _joi["default"].string().valid('all', 'admin'),
+            boardDeletion: _joi["default"].string().valid('admin', 'all')
           });
           _context2.prev = 1;
           _context2.next = 4;
           return correctCondition.validateAsync(req.body, {
             abortEarly: false,
-            allowUnknown: true
+            allowUnknown: false
           });
         case 4:
           next();
@@ -148,10 +152,80 @@ var updateMemberRole = /*#__PURE__*/function () {
     return _ref4.apply(this, arguments);
   };
 }();
+var transferOwnership = /*#__PURE__*/function () {
+  var _ref5 = (0, _asyncToGenerator2["default"])(/*#__PURE__*/_regenerator["default"].mark(function _callee5(req, res, next) {
+    var correctCondition;
+    return _regenerator["default"].wrap(function _callee5$(_context5) {
+      while (1) switch (_context5.prev = _context5.next) {
+        case 0:
+          correctCondition = _joi["default"].object({
+            targetUserId: _joi["default"].string().required().pattern(_validators.OBJECT_ID_RULE).message(_validators.OBJECT_ID_RULE_MESSAGE)
+          });
+          _context5.prev = 1;
+          _context5.next = 4;
+          return correctCondition.validateAsync(req.body, {
+            abortEarly: false
+          });
+        case 4:
+          next();
+          _context5.next = 10;
+          break;
+        case 7:
+          _context5.prev = 7;
+          _context5.t0 = _context5["catch"](1);
+          next(new _ApiError["default"](_httpStatusCodes.StatusCodes.UNPROCESSABLE_ENTITY, new Error(_context5.t0).message));
+        case 10:
+        case "end":
+          return _context5.stop();
+      }
+    }, _callee5, null, [[1, 7]]);
+  }));
+  return function transferOwnership(_x11, _x12, _x13) {
+    return _ref5.apply(this, arguments);
+  };
+}();
+var updateNotificationPrefs = /*#__PURE__*/function () {
+  var _ref6 = (0, _asyncToGenerator2["default"])(/*#__PURE__*/_regenerator["default"].mark(function _callee6(req, res, next) {
+    var correctCondition;
+    return _regenerator["default"].wrap(function _callee6$(_context6) {
+      while (1) switch (_context6.prev = _context6.next) {
+        case 0:
+          correctCondition = _joi["default"].object({
+            memberJoins: _joi["default"]["boolean"](),
+            boardChanges: _joi["default"]["boolean"](),
+            mentions: _joi["default"]["boolean"](),
+            boardActivity: _joi["default"]["boolean"]()
+          }).min(1);
+          _context6.prev = 1;
+          _context6.next = 4;
+          return correctCondition.validateAsync(req.body, {
+            abortEarly: false,
+            allowUnknown: false
+          });
+        case 4:
+          next();
+          _context6.next = 10;
+          break;
+        case 7:
+          _context6.prev = 7;
+          _context6.t0 = _context6["catch"](1);
+          next(new _ApiError["default"](_httpStatusCodes.StatusCodes.UNPROCESSABLE_ENTITY, new Error(_context6.t0).message));
+        case 10:
+        case "end":
+          return _context6.stop();
+      }
+    }, _callee6, null, [[1, 7]]);
+  }));
+  return function updateNotificationPrefs(_x14, _x15, _x16) {
+    return _ref6.apply(this, arguments);
+  };
+}();
 var workspaceValidation = {
   createNew: createNew,
   update: update,
   inviteMember: inviteMember,
-  updateMemberRole: updateMemberRole
+  updateMemberRole: updateMemberRole,
+  transferOwnership: transferOwnership,
+  updateNotificationPrefs: updateNotificationPrefs
 };
 exports.workspaceValidation = workspaceValidation;

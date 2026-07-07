@@ -11,6 +11,8 @@ var _httpStatusCodes = require("http-status-codes");
 var _boardService = require("../services/boardService");
 var _cardService = require("../services/cardService");
 var _columnService = require("../services/columnService");
+var _notificationService = require("../services/notificationService");
+var _constants = require("../utils/constants");
 var createNew = /*#__PURE__*/function () {
   var _ref = (0, _asyncToGenerator2["default"])(/*#__PURE__*/_regenerator["default"].mark(function _callee(req, res, next) {
     var userId, createBoard;
@@ -28,17 +30,29 @@ var createNew = /*#__PURE__*/function () {
           createBoard = _context.sent;
           // có kq thì trả về phía client
           res.status(_httpStatusCodes.StatusCodes.CREATED).json(createBoard);
-          _context.next = 11;
+
+          // Thông báo in-app cho thành viên workspace: có board mới — best-effort, không chặn response
+          if (createBoard !== null && createBoard !== void 0 && createBoard.workspaceId) {
+            _notificationService.notificationService.notifyWorkspaceBoardChange({
+              io: req.app.get('socketio'),
+              type: _constants.NOTIFICATION_TYPES.BOARD_CREATED,
+              workspaceId: createBoard.workspaceId.toString(),
+              boardTitle: createBoard.title,
+              boardId: createBoard._id.toString(),
+              actorId: userId
+            });
+          }
+          _context.next = 12;
           break;
-        case 8:
-          _context.prev = 8;
+        case 9:
+          _context.prev = 9;
           _context.t0 = _context["catch"](0);
           next(_context.t0);
-        case 11:
+        case 12:
         case "end":
           return _context.stop();
       }
-    }, _callee, null, [[0, 8]]);
+    }, _callee, null, [[0, 9]]);
   }));
   return function createNew(_x, _x2, _x3) {
     return _ref.apply(this, arguments);
@@ -57,18 +71,21 @@ var getDetails = /*#__PURE__*/function () {
           return _boardService.boardService.getDetails(userId, boardId);
         case 5:
           board = _context2.sent;
+          if (board) {
+            board.userAccessRole = req.boardAccessRole || 'viewer';
+          }
           res.status(_httpStatusCodes.StatusCodes.OK).json(board);
-          _context2.next = 12;
+          _context2.next = 13;
           break;
-        case 9:
-          _context2.prev = 9;
+        case 10:
+          _context2.prev = 10;
           _context2.t0 = _context2["catch"](0);
           next(_context2.t0);
-        case 12:
+        case 13:
         case "end":
           return _context2.stop();
       }
-    }, _callee2, null, [[0, 9]]);
+    }, _callee2, null, [[0, 10]]);
   }));
   return function getDetails(_x4, _x5, _x6) {
     return _ref2.apply(this, arguments);
@@ -139,27 +156,28 @@ var updateVisibility = /*#__PURE__*/function () {
 }();
 var moveCardifferentColumn = /*#__PURE__*/function () {
   var _ref5 = (0, _asyncToGenerator2["default"])(/*#__PURE__*/_regenerator["default"].mark(function _callee5(req, res, next) {
-    var result;
+    var userId, result;
     return _regenerator["default"].wrap(function _callee5$(_context5) {
       while (1) switch (_context5.prev = _context5.next) {
         case 0:
           _context5.prev = 0;
-          _context5.next = 3;
-          return _boardService.boardService.moveCardifferentColumn(req.body);
-        case 3:
+          userId = req.jwtDecoded._id;
+          _context5.next = 4;
+          return _boardService.boardService.moveCardifferentColumn(req.body, userId);
+        case 4:
           result = _context5.sent;
           res.status(_httpStatusCodes.StatusCodes.OK).json(result);
-          _context5.next = 10;
+          _context5.next = 11;
           break;
-        case 7:
-          _context5.prev = 7;
+        case 8:
+          _context5.prev = 8;
           _context5.t0 = _context5["catch"](0);
           next(_context5.t0);
-        case 10:
+        case 11:
         case "end":
           return _context5.stop();
       }
-    }, _callee5, null, [[0, 7]]);
+    }, _callee5, null, [[0, 8]]);
   }));
   return function moveCardifferentColumn(_x11, _x12, _x13) {
     return _ref5.apply(this, arguments);
@@ -167,19 +185,19 @@ var moveCardifferentColumn = /*#__PURE__*/function () {
 }();
 var getBoards = /*#__PURE__*/function () {
   var _ref6 = (0, _asyncToGenerator2["default"])(/*#__PURE__*/_regenerator["default"].mark(function _callee6(req, res, next) {
-    var userId, _req$query, page, itemsPerPage, q, workspaceId, queryFilters, results;
+    var userId, _req$query, page, itemsPerPage, q, workspaceId, sort, queryFilters, results;
     return _regenerator["default"].wrap(function _callee6$(_context6) {
       while (1) switch (_context6.prev = _context6.next) {
         case 0:
           _context6.prev = 0;
           userId = req.jwtDecoded._id;
-          _req$query = req.query, page = _req$query.page, itemsPerPage = _req$query.itemsPerPage, q = _req$query.q, workspaceId = _req$query.workspaceId;
+          _req$query = req.query, page = _req$query.page, itemsPerPage = _req$query.itemsPerPage, q = _req$query.q, workspaceId = _req$query.workspaceId, sort = _req$query.sort;
           queryFilters = q || {};
           if (workspaceId !== undefined) {
             queryFilters.workspaceId = workspaceId;
           }
           _context6.next = 7;
-          return _boardService.boardService.getBoards(userId, page, itemsPerPage, queryFilters);
+          return _boardService.boardService.getBoards(userId, page, itemsPerPage, queryFilters, sort);
         case 7:
           results = _context6.sent;
           res.status(_httpStatusCodes.StatusCodes.OK).json(results);
@@ -201,28 +219,41 @@ var getBoards = /*#__PURE__*/function () {
 }();
 var deleteItem = /*#__PURE__*/function () {
   var _ref7 = (0, _asyncToGenerator2["default"])(/*#__PURE__*/_regenerator["default"].mark(function _callee7(req, res, next) {
-    var boardId, result;
+    var boardId, actorBoardRole, result;
     return _regenerator["default"].wrap(function _callee7$(_context7) {
       while (1) switch (_context7.prev = _context7.next) {
         case 0:
           _context7.prev = 0;
           boardId = req.params.id;
-          _context7.next = 4;
-          return _boardService.boardService.deleteItem(boardId);
-        case 4:
+          actorBoardRole = req.boardAccessRole;
+          _context7.next = 5;
+          return _boardService.boardService.deleteItem(boardId, actorBoardRole);
+        case 5:
           result = _context7.sent;
           res.status(_httpStatusCodes.StatusCodes.OK).json(result);
-          _context7.next = 11;
+
+          // Thông báo in-app cho thành viên workspace: 1 board vừa bị xoá — best-effort, không chặn response
+          // (board đã bị xoá nên không truyền boardId để điều hướng)
+          if (result !== null && result !== void 0 && result.workspaceId) {
+            _notificationService.notificationService.notifyWorkspaceBoardChange({
+              io: req.app.get('socketio'),
+              type: _constants.NOTIFICATION_TYPES.BOARD_DELETED,
+              workspaceId: result.workspaceId.toString(),
+              boardTitle: result.boardTitle,
+              actorId: req.jwtDecoded._id
+            });
+          }
+          _context7.next = 13;
           break;
-        case 8:
-          _context7.prev = 8;
+        case 10:
+          _context7.prev = 10;
           _context7.t0 = _context7["catch"](0);
           next(_context7.t0);
-        case 11:
+        case 13:
         case "end":
           return _context7.stop();
       }
-    }, _callee7, null, [[0, 8]]);
+    }, _callee7, null, [[0, 10]]);
   }));
   return function deleteItem(_x17, _x18, _x19) {
     return _ref7.apply(this, arguments);
@@ -293,32 +324,27 @@ var cloneTemplate = /*#__PURE__*/function () {
       while (1) switch (_context0.prev = _context0.next) {
         case 0:
           _context0.prev = 0;
+          // templateBoardId đã được boardValidation.cloneTemplate validate (required + đúng định dạng ObjectId)
           userId = req.jwtDecoded._id;
           templateBoardId = req.body.templateBoardId;
-          if (templateBoardId) {
-            _context0.next = 5;
-            break;
-          }
-          throw new ApiError(_httpStatusCodes.StatusCodes.BAD_REQUEST, 'templateBoardId is required');
-        case 5:
-          _context0.next = 7;
+          _context0.next = 5;
           return _boardService.boardService.cloneTemplate(userId, templateBoardId);
-        case 7:
+        case 5:
           newBoard = _context0.sent;
           res.status(_httpStatusCodes.StatusCodes.CREATED).json({
             newBoardId: newBoard._id
           });
-          _context0.next = 14;
+          _context0.next = 12;
           break;
-        case 11:
-          _context0.prev = 11;
+        case 9:
+          _context0.prev = 9;
           _context0.t0 = _context0["catch"](0);
           next(_context0.t0);
-        case 14:
+        case 12:
         case "end":
           return _context0.stop();
       }
-    }, _callee0, null, [[0, 11]]);
+    }, _callee0, null, [[0, 9]]);
   }));
   return function cloneTemplate(_x26, _x27, _x28) {
     return _ref0.apply(this, arguments);
@@ -411,6 +437,128 @@ var getColumnTemplates = /*#__PURE__*/function () {
     return _ref11.apply(this, arguments);
   };
 }();
+var joinBoard = /*#__PURE__*/function () {
+  var _ref12 = (0, _asyncToGenerator2["default"])(/*#__PURE__*/_regenerator["default"].mark(function _callee12(req, res, next) {
+    var userId, boardId, newMember;
+    return _regenerator["default"].wrap(function _callee12$(_context12) {
+      while (1) switch (_context12.prev = _context12.next) {
+        case 0:
+          _context12.prev = 0;
+          userId = req.jwtDecoded._id;
+          boardId = req.params.id;
+          _context12.next = 5;
+          return _boardService.boardService.joinBoard(userId, boardId);
+        case 5:
+          newMember = _context12.sent;
+          res.status(_httpStatusCodes.StatusCodes.OK).json({
+            message: 'Joined successfully!',
+            newMember: newMember
+          });
+          _context12.next = 12;
+          break;
+        case 9:
+          _context12.prev = 9;
+          _context12.t0 = _context12["catch"](0);
+          next(_context12.t0);
+        case 12:
+        case "end":
+          return _context12.stop();
+      }
+    }, _callee12, null, [[0, 9]]);
+  }));
+  return function joinBoard(_x38, _x39, _x40) {
+    return _ref12.apply(this, arguments);
+  };
+}();
+var leaveBoard = /*#__PURE__*/function () {
+  var _ref13 = (0, _asyncToGenerator2["default"])(/*#__PURE__*/_regenerator["default"].mark(function _callee13(req, res, next) {
+    var userId, boardId, result;
+    return _regenerator["default"].wrap(function _callee13$(_context13) {
+      while (1) switch (_context13.prev = _context13.next) {
+        case 0:
+          _context13.prev = 0;
+          userId = req.jwtDecoded._id;
+          boardId = req.params.id;
+          _context13.next = 5;
+          return _boardService.boardService.leaveBoard(userId, boardId);
+        case 5:
+          result = _context13.sent;
+          res.status(_httpStatusCodes.StatusCodes.OK).json(result);
+          _context13.next = 12;
+          break;
+        case 9:
+          _context13.prev = 9;
+          _context13.t0 = _context13["catch"](0);
+          next(_context13.t0);
+        case 12:
+        case "end":
+          return _context13.stop();
+      }
+    }, _callee13, null, [[0, 9]]);
+  }));
+  return function leaveBoard(_x41, _x42, _x43) {
+    return _ref13.apply(this, arguments);
+  };
+}();
+var getStarredBoards = /*#__PURE__*/function () {
+  var _ref14 = (0, _asyncToGenerator2["default"])(/*#__PURE__*/_regenerator["default"].mark(function _callee14(req, res, next) {
+    var userId, results;
+    return _regenerator["default"].wrap(function _callee14$(_context14) {
+      while (1) switch (_context14.prev = _context14.next) {
+        case 0:
+          _context14.prev = 0;
+          userId = req.jwtDecoded._id;
+          _context14.next = 4;
+          return _boardService.boardService.getStarredBoards(userId);
+        case 4:
+          results = _context14.sent;
+          res.status(_httpStatusCodes.StatusCodes.OK).json(results);
+          _context14.next = 11;
+          break;
+        case 8:
+          _context14.prev = 8;
+          _context14.t0 = _context14["catch"](0);
+          next(_context14.t0);
+        case 11:
+        case "end":
+          return _context14.stop();
+      }
+    }, _callee14, null, [[0, 8]]);
+  }));
+  return function getStarredBoards(_x44, _x45, _x46) {
+    return _ref14.apply(this, arguments);
+  };
+}();
+var toggleStarred = /*#__PURE__*/function () {
+  var _ref15 = (0, _asyncToGenerator2["default"])(/*#__PURE__*/_regenerator["default"].mark(function _callee15(req, res, next) {
+    var userId, boardId, result;
+    return _regenerator["default"].wrap(function _callee15$(_context15) {
+      while (1) switch (_context15.prev = _context15.next) {
+        case 0:
+          _context15.prev = 0;
+          userId = req.jwtDecoded._id;
+          boardId = req.params.id;
+          _context15.next = 5;
+          return _boardService.boardService.toggleStarred(userId, boardId);
+        case 5:
+          result = _context15.sent;
+          res.status(_httpStatusCodes.StatusCodes.OK).json(result);
+          _context15.next = 12;
+          break;
+        case 9:
+          _context15.prev = 9;
+          _context15.t0 = _context15["catch"](0);
+          next(_context15.t0);
+        case 12:
+        case "end":
+          return _context15.stop();
+      }
+    }, _callee15, null, [[0, 9]]);
+  }));
+  return function toggleStarred(_x47, _x48, _x49) {
+    return _ref15.apply(this, arguments);
+  };
+}();
 var boardController = {
   createNew: createNew,
   getDetails: getDetails,
@@ -424,6 +572,10 @@ var boardController = {
   bulkDeleteItems: bulkDeleteItems,
   getArchivedItems: getArchivedItems,
   getCardTemplates: getCardTemplates,
-  getColumnTemplates: getColumnTemplates
+  getColumnTemplates: getColumnTemplates,
+  joinBoard: joinBoard,
+  leaveBoard: leaveBoard,
+  getStarredBoards: getStarredBoards,
+  toggleStarred: toggleStarred
 };
 exports.boardController = boardController;

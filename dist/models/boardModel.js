@@ -42,6 +42,8 @@ var BOARD_COLLECTION_SCHEMA = _joi["default"].object({
   ownerIds: _joi["default"].array().items(_joi["default"].string().pattern(_validators.OBJECT_ID_RULE).message(_validators.OBJECT_ID_RULE_MESSAGE))["default"]([]),
   // những thành viên của board
   memberIds: _joi["default"].array().items(_joi["default"].string().pattern(_validators.OBJECT_ID_RULE).message(_validators.OBJECT_ID_RULE_MESSAGE))["default"]([]),
+  // Danh sách userId đã gắn sao (star) board này — mỗi user tự quản lý danh sách sao của mình
+  starredBy: _joi["default"].array().items(_joi["default"].string().pattern(_validators.OBJECT_ID_RULE).message(_validators.OBJECT_ID_RULE_MESSAGE))["default"]([]),
   columnOrderIds: _joi["default"].array().items(_joi["default"].string().pattern(_validators.OBJECT_ID_RULE).message(_validators.OBJECT_ID_RULE_MESSAGE))["default"]([]),
   customFields: _joi["default"].array().items(_joi["default"].object({
     _id: _joi["default"].string().required(),
@@ -61,7 +63,9 @@ var BOARD_COLLECTION_SCHEMA = _joi["default"].object({
 });
 
 // chỉ định ra những field mà chúng ta ko muốn cho phép cập nhật trong hàm update
-var INVALID_UPDATE_FIELDS = ['_id', 'createdAt'];
+// (các field nhạy cảm bên dưới đều được quản lý bằng method riêng: pushMemberIds, starBoard,
+//  pushCustomField, deleteOneById... nên KHÔNG cho phép cập nhật qua generic update để chặn mass-assignment)
+var INVALID_UPDATE_FIELDS = ['_id', 'createAt', 'createdAt', '_destroy', 'ownerIds', 'memberIds', 'starredBy', 'customFields', 'isTemplate', 'slug'];
 var validateBeforeCreate = /*#__PURE__*/function () {
   var _ref = (0, _asyncToGenerator2["default"])(/*#__PURE__*/_regenerator["default"].mark(function _callee(data) {
     return _regenerator["default"].wrap(function _callee$(_context) {
@@ -395,7 +399,7 @@ var update = /*#__PURE__*/function () {
           // lọc những cái field mà chúng ta ko cho phép cập nhật linh tinh
           Object.keys(updateData).forEach(function (fieldName) {
             if (INVALID_UPDATE_FIELDS.includes(fieldName)) {
-              delete updateData(fieldName);
+              delete updateData[fieldName];
             }
           });
 
@@ -438,13 +442,31 @@ var update = /*#__PURE__*/function () {
     return _ref8.apply(this, arguments);
   };
 }();
+// Ánh xạ tuỳ chọn sắp xếp từ FE sang stage $sort của Mongo
+var BOARD_SORT_MAP = {
+  recent: {
+    createdAt: -1
+  },
+  'a-z': {
+    title: 1
+  },
+  'z-a': {
+    title: -1
+  }
+};
+
+// Escape ký tự đặc biệt để tìm kiếm literal (tránh RegExp lỗi khi user gõ ( [ * ? ...)
+var escapeRegex = function escapeRegex(str) {
+  return String(str).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+};
 var getBoards = /*#__PURE__*/function () {
-  var _ref9 = (0, _asyncToGenerator2["default"])(/*#__PURE__*/_regenerator["default"].mark(function _callee9(userId, page, itemsPerPage, queryFilters) {
-    var _res$queryTotalBoards, queryConditions, query, res;
+  var _ref9 = (0, _asyncToGenerator2["default"])(/*#__PURE__*/_regenerator["default"].mark(function _callee9(userId, page, itemsPerPage, queryFilters, sortOption) {
+    var _res$queryTotalBoards, sortStage, queryConditions, db, myWorkspaces, myWorkspaceIds, _db, _myWorkspaces, _myWorkspaceIds, query, res;
     return _regenerator["default"].wrap(function _callee9$(_context9) {
       while (1) switch (_context9.prev = _context9.next) {
         case 0:
           _context9.prev = 0;
+          sortStage = BOARD_SORT_MAP[sortOption] || BOARD_SORT_MAP.recent;
           queryConditions = [
           // điều kiện 1: board chưa bị xóa
           {
@@ -455,10 +477,79 @@ var getBoards = /*#__PURE__*/function () {
             isTemplate: {
               $ne: true
             }
-          },
-          // Điều kiện 03: cái thằng userId đang thực hiện request này nó phải thuộc
-          // vào một trong 2 cái mảng ownerIds hoặc memberIds, sử dụng toán tử $all của mongodb
-          {
+          }]; // Điều kiện 03: Phân quyền xem Board
+          if (!(queryFilters && queryFilters.workspaceId && queryFilters.workspaceId !== 'null')) {
+            _context9.next = 31;
+            break;
+          }
+          if (!(queryFilters.workspaceId === 'all')) {
+            _context9.next = 14;
+            break;
+          }
+          // Global search (navbar): board của mình (owner/member) + board workspace_visible/public
+          // trong các workspace mình tham gia. Loại board private của người khác.
+          db = (0, _mongodb.GET_DB)();
+          _context9.next = 8;
+          return db.collection('workspaces').find({
+            members: {
+              $elemMatch: {
+                userId: new _mongodb2.ObjectId(userId),
+                status: 'active'
+              }
+            }
+          }).toArray();
+        case 8:
+          myWorkspaces = _context9.sent;
+          myWorkspaceIds = myWorkspaces.map(function (ws) {
+            return ws._id;
+          });
+          queryConditions.push({
+            $or: [{
+              ownerIds: {
+                $all: [new _mongodb2.ObjectId(userId)]
+              }
+            }, {
+              memberIds: {
+                $all: [new _mongodb2.ObjectId(userId)]
+              }
+            }, {
+              workspaceId: {
+                $in: myWorkspaceIds
+              },
+              type: {
+                $in: [_constants.BOARD_TYPES.WORKSPACE_VISIBLE, _constants.BOARD_TYPES.PUBLIC]
+              }
+            }]
+          });
+          delete queryFilters.workspaceId;
+          _context9.next = 29;
+          break;
+        case 14:
+          if (!(queryFilters.workspaceId === 'guest')) {
+            _context9.next = 26;
+            break;
+          }
+          _db = (0, _mongodb.GET_DB)();
+          _context9.next = 18;
+          return _db.collection('workspaces').find({
+            'members.userId': new _mongodb2.ObjectId(userId)
+          }).toArray();
+        case 18:
+          _myWorkspaces = _context9.sent;
+          _myWorkspaceIds = _myWorkspaces.map(function (ws) {
+            return ws._id;
+          });
+          queryConditions.push({
+            workspaceId: {
+              $ne: null
+            }
+          });
+          queryConditions.push({
+            workspaceId: {
+              $nin: _myWorkspaceIds
+            }
+          });
+          queryConditions.push({
             $or: [{
               ownerIds: {
                 $all: [new _mongodb2.ObjectId(userId)]
@@ -468,35 +559,72 @@ var getBoards = /*#__PURE__*/function () {
                 $all: [new _mongodb2.ObjectId(userId)]
               }
             }]
-          }]; // xử lý query filter cho từng trường hợp search board
+          });
+          delete queryFilters.workspaceId;
+          _context9.next = 29;
+          break;
+        case 26:
+          queryConditions.push({
+            workspaceId: new _mongodb2.ObjectId(queryFilters.workspaceId)
+          });
+          // Nếu đang xem trong 1 workspace cụ thể -> được xem board workspace_visible, public, HOẶC là member/owner của private board
+          queryConditions.push({
+            $or: [{
+              type: _constants.BOARD_TYPES.WORKSPACE_VISIBLE
+            }, {
+              type: _constants.BOARD_TYPES.PUBLIC
+            }, {
+              ownerIds: {
+                $all: [new _mongodb2.ObjectId(userId)]
+              }
+            }, {
+              memberIds: {
+                $all: [new _mongodb2.ObjectId(userId)]
+              }
+            }]
+          });
+          delete queryFilters.workspaceId; // Xóa để không bị duyệt lại ở vòng lặp filter dưới
+        case 29:
+          _context9.next = 32;
+          break;
+        case 31:
+          // Nếu đang xem ở ngoài (Personal boards) -> Bắt buộc phải là owner hoặc member
+          queryConditions.push({
+            $or: [{
+              ownerIds: {
+                $all: [new _mongodb2.ObjectId(userId)]
+              }
+            }, {
+              memberIds: {
+                $all: [new _mongodb2.ObjectId(userId)]
+              }
+            }]
+          });
+        case 32:
+          // xử lý query filter cho từng trường hợp search board (còn lại)
           if (queryFilters) {
             Object.keys(queryFilters).forEach(function (key) {
               if (key === 'workspaceId') {
-                if (queryFilters[key] && queryFilters[key] !== 'null') {
-                  queryConditions.push({
-                    workspaceId: new _mongodb2.ObjectId(queryFilters[key])
-                  });
-                } else {
+                if (queryFilters[key] === 'null') {
                   queryConditions.push({
                     workspaceId: null
                   });
                 }
               } else {
                 queryConditions.push((0, _defineProperty2["default"])({}, key, {
-                  $regex: new RegExp(queryFilters[key], 'i')
+                  $regex: escapeRegex(queryFilters[key]),
+                  $options: 'i'
                 }));
               }
             });
           }
-          _context9.next = 5;
+          _context9.next = 35;
           return (0, _mongodb.GET_DB)().collection(BOARD_COLLECTION_NAME).aggregate([{
             $match: {
               $and: queryConditions
             }
           }, {
-            $sort: {
-              title: 1
-            }
+            $sort: sortStage
           }, {
             $facet: {
               'queryBoards': [{
@@ -513,24 +641,24 @@ var getBoards = /*#__PURE__*/function () {
               locale: 'en'
             }
           }).toArray();
-        case 5:
+        case 35:
           query = _context9.sent;
           res = query[0];
           return _context9.abrupt("return", {
             boards: res.queryBoards || [],
             totalBoards: ((_res$queryTotalBoards = res.queryTotalBoards[0]) === null || _res$queryTotalBoards === void 0 ? void 0 : _res$queryTotalBoards.countedAllBoards) || 0
           });
-        case 10:
-          _context9.prev = 10;
+        case 40:
+          _context9.prev = 40;
           _context9.t0 = _context9["catch"](0);
           throw new Error(_context9.t0);
-        case 13:
+        case 43:
         case "end":
           return _context9.stop();
       }
-    }, _callee9, null, [[0, 10]]);
+    }, _callee9, null, [[0, 40]]);
   }));
-  return function getBoards(_x12, _x13, _x14, _x15) {
+  return function getBoards(_x12, _x13, _x14, _x15, _x16) {
     return _ref9.apply(this, arguments);
   };
 }();
@@ -597,7 +725,7 @@ var pushMemberIds = /*#__PURE__*/function () {
       }
     }, _callee1, null, [[0, 7]]);
   }));
-  return function pushMemberIds(_x16, _x17) {
+  return function pushMemberIds(_x17, _x18) {
     return _ref1.apply(this, arguments);
   };
 }();
@@ -631,7 +759,7 @@ var pushCustomField = /*#__PURE__*/function () {
       }
     }, _callee10, null, [[0, 7]]);
   }));
-  return function pushCustomField(_x18, _x19) {
+  return function pushCustomField(_x19, _x20) {
     return _ref10.apply(this, arguments);
   };
 }();
@@ -670,7 +798,7 @@ var updateCustomField = /*#__PURE__*/function () {
       }
     }, _callee11, null, [[0, 11]]);
   }));
-  return function updateCustomField(_x20, _x21, _x22) {
+  return function updateCustomField(_x21, _x22, _x23) {
     return _ref11.apply(this, arguments);
   };
 }();
@@ -706,7 +834,7 @@ var pullCustomField = /*#__PURE__*/function () {
       }
     }, _callee12, null, [[0, 7]]);
   }));
-  return function pullCustomField(_x23, _x24) {
+  return function pullCustomField(_x24, _x25) {
     return _ref12.apply(this, arguments);
   };
 }();
@@ -734,25 +862,30 @@ var deleteOneById = /*#__PURE__*/function () {
       }
     }, _callee13, null, [[0, 7]]);
   }));
-  return function deleteOneById(_x25) {
+  return function deleteOneById(_x26) {
     return _ref13.apply(this, arguments);
   };
 }();
-var findByWorkspaceId = /*#__PURE__*/function () {
-  var _ref14 = (0, _asyncToGenerator2["default"])(/*#__PURE__*/_regenerator["default"].mark(function _callee14(workspaceId) {
-    var results;
+var pullMemberIds = /*#__PURE__*/function () {
+  var _ref14 = (0, _asyncToGenerator2["default"])(/*#__PURE__*/_regenerator["default"].mark(function _callee14(boardId, userId) {
+    var result;
     return _regenerator["default"].wrap(function _callee14$(_context14) {
       while (1) switch (_context14.prev = _context14.next) {
         case 0:
           _context14.prev = 0;
           _context14.next = 3;
-          return (0, _mongodb.GET_DB)().collection(BOARD_COLLECTION_NAME).find({
-            workspaceId: new _mongodb2.ObjectId(workspaceId),
-            _destroy: false
-          }).toArray();
+          return (0, _mongodb.GET_DB)().collection(BOARD_COLLECTION_NAME).findOneAndUpdate({
+            _id: new _mongodb2.ObjectId(boardId)
+          }, {
+            $pull: {
+              memberIds: new _mongodb2.ObjectId(userId)
+            }
+          }, {
+            returnDocument: 'after'
+          });
         case 3:
-          results = _context14.sent;
-          return _context14.abrupt("return", results);
+          result = _context14.sent;
+          return _context14.abrupt("return", result);
         case 7:
           _context14.prev = 7;
           _context14.t0 = _context14["catch"](0);
@@ -763,8 +896,183 @@ var findByWorkspaceId = /*#__PURE__*/function () {
       }
     }, _callee14, null, [[0, 7]]);
   }));
-  return function findByWorkspaceId(_x26) {
+  return function pullMemberIds(_x27, _x28) {
     return _ref14.apply(this, arguments);
+  };
+}();
+var findByWorkspaceId = /*#__PURE__*/function () {
+  var _ref15 = (0, _asyncToGenerator2["default"])(/*#__PURE__*/_regenerator["default"].mark(function _callee15(workspaceId) {
+    var results;
+    return _regenerator["default"].wrap(function _callee15$(_context15) {
+      while (1) switch (_context15.prev = _context15.next) {
+        case 0:
+          _context15.prev = 0;
+          _context15.next = 3;
+          return (0, _mongodb.GET_DB)().collection(BOARD_COLLECTION_NAME).find({
+            workspaceId: new _mongodb2.ObjectId(workspaceId),
+            _destroy: false
+          }).toArray();
+        case 3:
+          results = _context15.sent;
+          return _context15.abrupt("return", results);
+        case 7:
+          _context15.prev = 7;
+          _context15.t0 = _context15["catch"](0);
+          throw new Error(_context15.t0);
+        case 10:
+        case "end":
+          return _context15.stop();
+      }
+    }, _callee15, null, [[0, 7]]);
+  }));
+  return function findByWorkspaceId(_x29) {
+    return _ref15.apply(this, arguments);
+  };
+}();
+
+// Thêm userId vào mảng starredBy ($addToSet để tránh trùng lặp khi gọi nhiều lần)
+var starBoard = /*#__PURE__*/function () {
+  var _ref16 = (0, _asyncToGenerator2["default"])(/*#__PURE__*/_regenerator["default"].mark(function _callee16(boardId, userId) {
+    var result;
+    return _regenerator["default"].wrap(function _callee16$(_context16) {
+      while (1) switch (_context16.prev = _context16.next) {
+        case 0:
+          _context16.prev = 0;
+          _context16.next = 3;
+          return (0, _mongodb.GET_DB)().collection(BOARD_COLLECTION_NAME).findOneAndUpdate({
+            _id: new _mongodb2.ObjectId(boardId)
+          }, {
+            $addToSet: {
+              starredBy: new _mongodb2.ObjectId(userId)
+            }
+          }, {
+            returnDocument: 'after'
+          });
+        case 3:
+          result = _context16.sent;
+          return _context16.abrupt("return", result);
+        case 7:
+          _context16.prev = 7;
+          _context16.t0 = _context16["catch"](0);
+          throw new Error(_context16.t0);
+        case 10:
+        case "end":
+          return _context16.stop();
+      }
+    }, _callee16, null, [[0, 7]]);
+  }));
+  return function starBoard(_x30, _x31) {
+    return _ref16.apply(this, arguments);
+  };
+}();
+
+// Gỡ userId khỏi mảng starredBy
+var unstarBoard = /*#__PURE__*/function () {
+  var _ref17 = (0, _asyncToGenerator2["default"])(/*#__PURE__*/_regenerator["default"].mark(function _callee17(boardId, userId) {
+    var result;
+    return _regenerator["default"].wrap(function _callee17$(_context17) {
+      while (1) switch (_context17.prev = _context17.next) {
+        case 0:
+          _context17.prev = 0;
+          _context17.next = 3;
+          return (0, _mongodb.GET_DB)().collection(BOARD_COLLECTION_NAME).findOneAndUpdate({
+            _id: new _mongodb2.ObjectId(boardId)
+          }, {
+            $pull: {
+              starredBy: new _mongodb2.ObjectId(userId)
+            }
+          }, {
+            returnDocument: 'after'
+          });
+        case 3:
+          result = _context17.sent;
+          return _context17.abrupt("return", result);
+        case 7:
+          _context17.prev = 7;
+          _context17.t0 = _context17["catch"](0);
+          throw new Error(_context17.t0);
+        case 10:
+        case "end":
+          return _context17.stop();
+      }
+    }, _callee17, null, [[0, 7]]);
+  }));
+  return function unstarBoard(_x32, _x33) {
+    return _ref17.apply(this, arguments);
+  };
+}();
+
+// Lấy danh sách board đã gắn sao của 1 user, kèm tên workspace (dùng $lookup để tránh N+1 query).
+// Chỉ project đúng vài field cần cho dropdown để payload nhẹ nhất có thể.
+var getStarredBoards = /*#__PURE__*/function () {
+  var _ref18 = (0, _asyncToGenerator2["default"])(/*#__PURE__*/_regenerator["default"].mark(function _callee18(userId) {
+    var result;
+    return _regenerator["default"].wrap(function _callee18$(_context18) {
+      while (1) switch (_context18.prev = _context18.next) {
+        case 0:
+          _context18.prev = 0;
+          _context18.next = 3;
+          return (0, _mongodb.GET_DB)().collection(BOARD_COLLECTION_NAME).aggregate([{
+            $match: {
+              starredBy: new _mongodb2.ObjectId(userId),
+              _destroy: false,
+              isTemplate: {
+                $ne: true
+              },
+              // Bảo mật: chỉ trả về board user vẫn còn quyền xem. Phòng trường hợp board từng public
+              // (đã được star) sau đó bị đổi thành private mà user không phải owner/member.
+              $or: [{
+                type: {
+                  $ne: _constants.BOARD_TYPES.PRIVATE
+                }
+              }, {
+                ownerIds: new _mongodb2.ObjectId(userId)
+              }, {
+                memberIds: new _mongodb2.ObjectId(userId)
+              }]
+            }
+          }, {
+            $lookup: {
+              from: 'workspaces',
+              // workspaceModel.WORKSPACE_COLLECTION_NAME
+              localField: 'workspaceId',
+              foreignField: '_id',
+              as: 'workspaceInfo'
+            }
+          }, {
+            $project: {
+              title: 1,
+              slug: 1,
+              background: 1,
+              // Bóc title của workspace đầu tiên (nếu là personal board thì workspaceInfo rỗng -> null)
+              workspaceName: {
+                $arrayElemAt: ['$workspaceInfo.title', 0]
+              }
+            }
+          }, {
+            $sort: {
+              title: 1
+            }
+          }], {
+            collation: {
+              locale: 'en'
+            }
+          }).toArray();
+        case 3:
+          result = _context18.sent;
+          return _context18.abrupt("return", result);
+        case 7:
+          _context18.prev = 7;
+          _context18.t0 = _context18["catch"](0);
+          throw new Error(_context18.t0);
+        case 10:
+        case "end":
+          return _context18.stop();
+      }
+    }, _callee18, null, [[0, 7]]);
+  }));
+  return function getStarredBoards(_x34) {
+    return _ref18.apply(this, arguments);
   };
 }();
 var boardModel = {
@@ -784,6 +1092,10 @@ var boardModel = {
   updateCustomField: updateCustomField,
   pullCustomField: pullCustomField,
   deleteOneById: deleteOneById,
-  findByWorkspaceId: findByWorkspaceId
+  findByWorkspaceId: findByWorkspaceId,
+  pullMemberIds: pullMemberIds,
+  starBoard: starBoard,
+  unstarBoard: unstarBoard,
+  getStarredBoards: getStarredBoards
 };
 exports.boardModel = boardModel;

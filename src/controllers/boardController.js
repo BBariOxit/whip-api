@@ -108,7 +108,8 @@ const getBoards = async (req, res, next) => {
 const deleteItem = async (req, res, next) => {
   try {
     const boardId = req.params.id
-    const result = await boardService.deleteItem(boardId)
+    const actorBoardRole = req.boardAccessRole
+    const result = await boardService.deleteItem(boardId, actorBoardRole)
     res.status(StatusCodes.OK).json(result)
 
     // Thông báo in-app cho thành viên workspace: 1 board vừa bị xoá — best-effort, không chặn response

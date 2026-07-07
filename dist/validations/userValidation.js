@@ -117,7 +117,7 @@ var update = /*#__PURE__*/function () {
       while (1) switch (_context4.prev = _context4.next) {
         case 0:
           correctCondition = _joi["default"].object({
-            displayName: _joi["default"].string().trim().strict(),
+            displayName: _joi["default"].string().min(1).max(50).trim().strict(),
             current_password: _joi["default"].string().pattern(_validators.PASSWORD_RULE).message("current_password: ".concat(_validators.PASSWORD_RULE_MESSAGE)),
             new_password: _joi["default"].string().pattern(_validators.PASSWORD_RULE).message("new_password: ".concat(_validators.PASSWORD_RULE_MESSAGE))
           });

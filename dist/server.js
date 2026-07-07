@@ -14,8 +14,9 @@ var _errorHandlingMiddleware = require("./middlewares/errorHandlingMiddleware");
 var _cookieParser = _interopRequireDefault(require("cookie-parser"));
 var _socket = _interopRequireDefault(require("socket.io"));
 var _http = _interopRequireDefault(require("http"));
-var _inviteUserToBoardSocket = require("./sockets/inviteUserToBoardSocket");
 var _cardCommentSocket = require("./sockets/cardCommentSocket");
+var _socketAuth = require("./sockets/socketAuth");
+var _notificationModel = require("./models/notificationModel");
 /* eslint-disable no-console */
 
 // Xử lý socket real-time với gói socket.io
@@ -51,11 +52,14 @@ var START_SERVER = function START_SERVER() {
   var io = (0, _socket["default"])(server, {
     cors: _cors2.corsOptions
   });
+  // Xác thực socket qua cookie accessToken -> gắn socket.userId (dùng để phân quyền join room)
+  io.use(_socketAuth.socketAuthMiddleware);
   // Lưu io instance vào app để Controller có thể truy cập qua req.app.get('socketio')
   app.set('socketio', io);
   io.on('connection', function (socket) {
-    // gọi các socket
-    (0, _inviteUserToBoardSocket.inviteUserToBoardSocket)(io, socket);
+    // Mỗi user tham gia 1 room riêng "user:<id>" để nhận thông báo cá nhân (vd lời mời vào board)
+    // được emit server-authoritative từ controller, thay vì broadcast cho tất cả.
+    if (socket.userId) socket.join("user:".concat(socket.userId));
     (0, _cardCommentSocket.cardCommentSocket)(io, socket);
   });
 
@@ -91,19 +95,31 @@ var START_SERVER = function START_SERVER() {
         return (0, _mongodb.CONNECT_DB)();
       case 4:
         console.log('2. Connected to mongoDB atlas');
-        START_SERVER();
-        _context.next = 12;
-        break;
+        // Tạo index cho notifications (idempotent) — best-effort, không chặn khởi động
+        _context.prev = 5;
+        _context.next = 8;
+        return _notificationModel.notificationModel.initIndexes();
       case 8:
-        _context.prev = 8;
-        _context.t0 = _context["catch"](0);
-        console.log(_context.t0);
+        _context.next = 13;
+        break;
+      case 10:
+        _context.prev = 10;
+        _context.t0 = _context["catch"](5);
+        console.error('notification initIndexes failed:', _context.t0 === null || _context.t0 === void 0 ? void 0 : _context.t0.message);
+      case 13:
+        START_SERVER();
+        _context.next = 20;
+        break;
+      case 16:
+        _context.prev = 16;
+        _context.t1 = _context["catch"](0);
+        console.log(_context.t1);
         process.exit(0);
-      case 12:
+      case 20:
       case "end":
         return _context.stop();
     }
-  }, _callee, null, [[0, 8]]);
+  }, _callee, null, [[0, 16], [5, 10]]);
 }))();
 
 //chỉ khi kết nối tới Database thành công thì chúng ta mới start server back-end lên

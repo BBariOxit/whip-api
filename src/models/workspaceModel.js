@@ -357,6 +357,12 @@ const getDetailsWithMembers = async (workspaceId) => {
         _id: '$_id',
         title: { $first: '$title' },
         description: { $first: '$description' },
+        logo: { $first: '$logo' },
+        // Access & Security settings
+        visibility: { $first: '$visibility' },
+        invitePermission: { $first: '$invitePermission' },
+        boardCreation: { $first: '$boardCreation' },
+        boardDeletion: { $first: '$boardDeletion' },
         createdAt: { $first: '$createdAt' },
         updatedAt: { $first: '$updatedAt' },
         _destroy: { $first: '$_destroy' },

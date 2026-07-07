@@ -37,7 +37,7 @@ Router.route('/:id/column-templates')
 Router.route('/:id')
   .get(authMiddleware.optionalAuth, requireBoardRole(['admin', 'member', 'viewer']), boardController.getDetails)
   .put(authMiddleware.isAuthorized, requireBoardAdmin, boardValidation.update, boardController.update)
-  .delete(authMiddleware.isAuthorized, requireBoardAdmin, boardController.deleteItem)
+  .delete(authMiddleware.isAuthorized, requireBoardRole(['admin', 'member']), boardController.deleteItem)
 
 Router.route('/:id/visibility')
   .put(authMiddleware.isAuthorized, requireBoardAdmin, boardController.updateVisibility)

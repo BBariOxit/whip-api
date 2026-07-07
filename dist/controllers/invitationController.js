@@ -11,7 +11,7 @@ var _httpStatusCodes = require("http-status-codes");
 var _invitationService = require("../services/invitationService");
 var createNewBoardInvitation = /*#__PURE__*/function () {
   var _ref = (0, _asyncToGenerator2["default"])(/*#__PURE__*/_regenerator["default"].mark(function _callee(req, res, next) {
-    var inviterId, resInvitation;
+    var inviterId, resInvitation, io;
     return _regenerator["default"].wrap(function _callee$(_context) {
       while (1) switch (_context.prev = _context.next) {
         case 0:
@@ -22,18 +22,24 @@ var createNewBoardInvitation = /*#__PURE__*/function () {
           return _invitationService.invitationService.createNewBoardInvitation(req.body, inviterId);
         case 4:
           resInvitation = _context.sent;
+          // Emit realtime tới ĐÚNG người được mời (room riêng của user). Server-authoritative:
+          // không broadcast lộ lời mời cho mọi client, và client không thể tự giả mạo lời mời.
+          io = req.app.get('socketio');
+          if (io && resInvitation !== null && resInvitation !== void 0 && resInvitation.inviteeId) {
+            io.to("user:".concat(resInvitation.inviteeId)).emit('BE_USER_INVITED_TO_BOARD', resInvitation);
+          }
           res.status(_httpStatusCodes.StatusCodes.CREATED).json(resInvitation);
-          _context.next = 11;
+          _context.next = 13;
           break;
-        case 8:
-          _context.prev = 8;
+        case 10:
+          _context.prev = 10;
           _context.t0 = _context["catch"](0);
           next(_context.t0);
-        case 11:
+        case 13:
         case "end":
           return _context.stop();
       }
-    }, _callee, null, [[0, 8]]);
+    }, _callee, null, [[0, 10]]);
   }));
   return function createNewBoardInvitation(_x, _x2, _x3) {
     return _ref.apply(this, arguments);

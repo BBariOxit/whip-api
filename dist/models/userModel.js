@@ -148,31 +148,27 @@ var findOneByEmail = /*#__PURE__*/function () {
     return _ref4.apply(this, arguments);
   };
 }();
-var update = /*#__PURE__*/function () {
-  var _ref5 = (0, _asyncToGenerator2["default"])(/*#__PURE__*/_regenerator["default"].mark(function _callee5(userId, updateData) {
-    var result;
+
+// Lấy nhiều user theo danh sách id (dùng để đối chiếu @mention với handle của member)
+var findManyByIds = /*#__PURE__*/function () {
+  var _ref5 = (0, _asyncToGenerator2["default"])(/*#__PURE__*/_regenerator["default"].mark(function _callee5(userIds) {
+    var objectIds, results;
     return _regenerator["default"].wrap(function _callee5$(_context5) {
       while (1) switch (_context5.prev = _context5.next) {
         case 0:
           _context5.prev = 0;
-          // Lọc những field mà chúng ta không cho phép cập nhật linh tinh
-          Object.keys(updateData).forEach(function (fieldName) {
-            if (INVALID_UPDATE_FIELDS.includes(fieldName)) {
-              delete updateData[fieldName];
-            }
+          objectIds = (userIds || []).map(function (id) {
+            return new _mongodb.ObjectId(id);
           });
           _context5.next = 4;
-          return (0, _mongodb2.GET_DB)().collection(USER_COLLECTION_NAME).findOneAndUpdate({
-            _id: new _mongodb.ObjectId(userId)
-          }, {
-            $set: updateData
-          }, {
-            returnDocument: 'after'
-          } // sẽ trả về kết quả mới sau khi cập nhật
-          );
+          return (0, _mongodb2.GET_DB)().collection(USER_COLLECTION_NAME).find({
+            _id: {
+              $in: objectIds
+            }
+          }).toArray();
         case 4:
-          result = _context5.sent;
-          return _context5.abrupt("return", result);
+          results = _context5.sent;
+          return _context5.abrupt("return", results);
         case 8:
           _context5.prev = 8;
           _context5.t0 = _context5["catch"](0);
@@ -183,8 +179,47 @@ var update = /*#__PURE__*/function () {
       }
     }, _callee5, null, [[0, 8]]);
   }));
-  return function update(_x5, _x6) {
+  return function findManyByIds(_x5) {
     return _ref5.apply(this, arguments);
+  };
+}();
+var update = /*#__PURE__*/function () {
+  var _ref6 = (0, _asyncToGenerator2["default"])(/*#__PURE__*/_regenerator["default"].mark(function _callee6(userId, updateData) {
+    var result;
+    return _regenerator["default"].wrap(function _callee6$(_context6) {
+      while (1) switch (_context6.prev = _context6.next) {
+        case 0:
+          _context6.prev = 0;
+          // Lọc những field mà chúng ta không cho phép cập nhật linh tinh
+          Object.keys(updateData).forEach(function (fieldName) {
+            if (INVALID_UPDATE_FIELDS.includes(fieldName)) {
+              delete updateData[fieldName];
+            }
+          });
+          _context6.next = 4;
+          return (0, _mongodb2.GET_DB)().collection(USER_COLLECTION_NAME).findOneAndUpdate({
+            _id: new _mongodb.ObjectId(userId)
+          }, {
+            $set: updateData
+          }, {
+            returnDocument: 'after'
+          } // sẽ trả về kết quả mới sau khi cập nhật
+          );
+        case 4:
+          result = _context6.sent;
+          return _context6.abrupt("return", result);
+        case 8:
+          _context6.prev = 8;
+          _context6.t0 = _context6["catch"](0);
+          throw new Error(_context6.t0);
+        case 11:
+        case "end":
+          return _context6.stop();
+      }
+    }, _callee6, null, [[0, 8]]);
+  }));
+  return function update(_x6, _x7) {
+    return _ref6.apply(this, arguments);
   };
 }();
 var userModel = {
@@ -194,6 +229,7 @@ var userModel = {
   createNew: createNew,
   findOneById: findOneById,
   findOneByEmail: findOneByEmail,
+  findManyByIds: findManyByIds,
   update: update
 };
 exports.userModel = userModel;

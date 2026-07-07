@@ -40,8 +40,8 @@ Router.route('/:id')
 Router.route('/:id/members')
   // Mọi member đều xem được danh sách members
   .get(authMiddleware.isAuthorized, requireWorkspaceRole([OWNER, ADMIN, MEMBER]), workspaceController.getMembers)
-  // Chỉ Owner + Admin mời member mới
-  .post(authMiddleware.isAuthorized, requireWorkspaceRole([OWNER, ADMIN]), workspaceValidation.inviteMember, workspaceController.inviteMember)
+  // Owner + Admin luôn invite được. Member: phụ thuộc workspace.invitePermission (enforce ở service)
+  .post(authMiddleware.isAuthorized, requireWorkspaceRole([OWNER, ADMIN, MEMBER]), workspaceValidation.inviteMember, workspaceController.inviteMember)
 
 // Cập nhật role hoặc kick member cụ thể
 Router.route('/:id/members/:targetUserId')

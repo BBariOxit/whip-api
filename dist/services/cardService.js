@@ -6,15 +6,20 @@ Object.defineProperty(exports, "__esModule", {
 });
 exports.cardService = void 0;
 var _regenerator = _interopRequireDefault(require("@babel/runtime/regenerator"));
+var _slicedToArray2 = _interopRequireDefault(require("@babel/runtime/helpers/slicedToArray"));
 var _defineProperty2 = _interopRequireDefault(require("@babel/runtime/helpers/defineProperty"));
 var _asyncToGenerator2 = _interopRequireDefault(require("@babel/runtime/helpers/asyncToGenerator"));
+var _httpStatusCodes = require("http-status-codes");
 var _cardModel = require("../models/cardModel");
 var _columnModel = require("../models/columnModel");
+var _boardModel = require("../models/boardModel");
 var _CloudinaryProvider = require("../providers/CloudinaryProvider");
 var _activityModel = require("../models/activityModel");
 var _labelModel = require("../models/labelModel");
 var _userModel = require("../models/userModel");
 var _constants = require("../utils/constants");
+var _ApiError = _interopRequireDefault(require("../utils/ApiError"));
+var _rbacMiddleware = require("../middlewares/rbacMiddleware");
 function _createForOfIteratorHelper(r, e) { var t = "undefined" != typeof Symbol && r[Symbol.iterator] || r["@@iterator"]; if (!t) { if (Array.isArray(r) || (t = _unsupportedIterableToArray(r)) || e && r && "number" == typeof r.length) { t && (r = t); var _n = 0, F = function F() {}; return { s: F, n: function n() { return _n >= r.length ? { done: !0 } : { done: !1, value: r[_n++] }; }, e: function e(r) { throw r; }, f: F }; } throw new TypeError("Invalid attempt to iterate non-iterable instance.\nIn order to be iterable, non-array objects must have a [Symbol.iterator]() method."); } var o, a = !0, u = !1; return { s: function s() { t = t.call(r); }, n: function n() { var r = t.next(); return a = r.done, r; }, e: function e(r) { u = !0, o = r; }, f: function f() { try { a || null == t["return"] || t["return"](); } finally { if (u) throw o; } } }; }
 function _unsupportedIterableToArray(r, a) { if (r) { if ("string" == typeof r) return _arrayLikeToArray(r, a); var t = {}.toString.call(r).slice(8, -1); return "Object" === t && r.constructor && (t = r.constructor.name), "Map" === t || "Set" === t ? Array.from(r) : "Arguments" === t || /^(?:Ui|I)nt(?:8|16|32)(?:Clamped)?Array$/.test(t) ? _arrayLikeToArray(r, a) : void 0; } }
 function _arrayLikeToArray(r, a) { (null == a || a > r.length) && (a = r.length); for (var e = 0, n = Array(a); e < a; e++) n[e] = r[e]; return n; }
@@ -459,7 +464,9 @@ var deleteItem = /*#__PURE__*/function () {
           });
         case 15:
           return _context6.abrupt("return", {
-            deleteResult: 'Card deleted successfully!'
+            deleteResult: 'Card deleted successfully!',
+            boardId: targetCard.boardId,
+            cardTitle: targetCard.title
           });
         case 18:
           _context6.prev = 18;
@@ -499,7 +506,9 @@ var archiveCard = /*#__PURE__*/function () {
           return _columnModel.columnModel.pullCardOrderIds(targetCard);
         case 10:
           return _context7.abrupt("return", {
-            archiveResult: 'Card archived successfully!'
+            archiveResult: 'Card archived successfully!',
+            boardId: targetCard.boardId,
+            cardTitle: targetCard.title
           });
         case 13:
           _context7.prev = 13;
@@ -673,35 +682,96 @@ var deleteTemplate = /*#__PURE__*/function () {
   };
 }();
 var duplicateCard = /*#__PURE__*/function () {
-  var _ref11 = (0, _asyncToGenerator2["default"])(/*#__PURE__*/_regenerator["default"].mark(function _callee11(cardId, targetColumnId) {
-    var newCard;
+  var _ref11 = (0, _asyncToGenerator2["default"])(/*#__PURE__*/_regenerator["default"].mark(function _callee11(cardId, targetColumnId, userId) {
+    var _yield$Promise$all, _yield$Promise$all2, sourceCard, targetColumn, targetBoard, targetRole, sourceBoard, sourceRole, newCard;
     return _regenerator["default"].wrap(function _callee11$(_context11) {
       while (1) switch (_context11.prev = _context11.next) {
         case 0:
           _context11.prev = 0;
           _context11.next = 3;
-          return _cardModel.cardModel.duplicateCard(cardId, targetColumnId);
+          return Promise.all([_cardModel.cardModel.findOneById(cardId), _columnModel.columnModel.findOneById(targetColumnId)]);
         case 3:
-          newCard = _context11.sent;
-          if (!newCard) {
-            _context11.next = 7;
+          _yield$Promise$all = _context11.sent;
+          _yield$Promise$all2 = (0, _slicedToArray2["default"])(_yield$Promise$all, 2);
+          sourceCard = _yield$Promise$all2[0];
+          targetColumn = _yield$Promise$all2[1];
+          if (!(!sourceCard || !targetColumn)) {
+            _context11.next = 9;
             break;
           }
-          _context11.next = 7;
+          throw new _ApiError["default"](_httpStatusCodes.StatusCodes.NOT_FOUND, 'Source card or target column not found!');
+        case 9:
+          _context11.next = 11;
+          return _boardModel.boardModel.findOneById(targetColumn.boardId);
+        case 11:
+          targetBoard = _context11.sent;
+          if (targetBoard) {
+            _context11.next = 14;
+            break;
+          }
+          throw new _ApiError["default"](_httpStatusCodes.StatusCodes.NOT_FOUND, 'Target board not found!');
+        case 14:
+          _context11.next = 16;
+          return (0, _rbacMiddleware.getBoardAccessRole)(targetBoard, userId);
+        case 16:
+          targetRole = _context11.sent;
+          if (!(targetRole !== 'admin' && targetRole !== 'member')) {
+            _context11.next = 19;
+            break;
+          }
+          throw new _ApiError["default"](_httpStatusCodes.StatusCodes.FORBIDDEN, 'You do not have permission to add cards to this board!');
+        case 19:
+          if (!(sourceCard.boardId.toString() !== targetColumn.boardId.toString())) {
+            _context11.next = 33;
+            break;
+          }
+          _context11.next = 22;
+          return _boardModel.boardModel.findOneById(sourceCard.boardId);
+        case 22:
+          sourceBoard = _context11.sent;
+          if (!sourceBoard) {
+            _context11.next = 29;
+            break;
+          }
+          _context11.next = 26;
+          return (0, _rbacMiddleware.getBoardAccessRole)(sourceBoard, userId);
+        case 26:
+          _context11.t0 = _context11.sent;
+          _context11.next = 30;
+          break;
+        case 29:
+          _context11.t0 = 'none';
+        case 30:
+          sourceRole = _context11.t0;
+          if (!(sourceRole === 'none')) {
+            _context11.next = 33;
+            break;
+          }
+          throw new _ApiError["default"](_httpStatusCodes.StatusCodes.FORBIDDEN, 'You do not have access to the source card!');
+        case 33:
+          _context11.next = 35;
+          return _cardModel.cardModel.duplicateCard(cardId, targetColumnId);
+        case 35:
+          newCard = _context11.sent;
+          if (!newCard) {
+            _context11.next = 39;
+            break;
+          }
+          _context11.next = 39;
           return _columnModel.columnModel.pushCardOrderIds(newCard);
-        case 7:
+        case 39:
           return _context11.abrupt("return", newCard);
-        case 10:
-          _context11.prev = 10;
-          _context11.t0 = _context11["catch"](0);
-          throw _context11.t0;
-        case 13:
+        case 42:
+          _context11.prev = 42;
+          _context11.t1 = _context11["catch"](0);
+          throw _context11.t1;
+        case 45:
         case "end":
           return _context11.stop();
       }
-    }, _callee11, null, [[0, 10]]);
+    }, _callee11, null, [[0, 42]]);
   }));
-  return function duplicateCard(_x22, _x23) {
+  return function duplicateCard(_x22, _x23, _x24) {
     return _ref11.apply(this, arguments);
   };
 }();

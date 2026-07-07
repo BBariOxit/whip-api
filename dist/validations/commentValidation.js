@@ -19,9 +19,9 @@ var createNew = /*#__PURE__*/function () {
         case 0:
           correctCondition = _joi["default"].object({
             cardId: _joi["default"].string().required().pattern(_validators.OBJECT_ID_RULE).message(_validators.OBJECT_ID_RULE_MESSAGE),
-            content: _joi["default"].string().required().trim().strict(),
+            content: _joi["default"].string().required().min(1).max(5000).trim().strict(),
             parentId: _joi["default"].string().pattern(_validators.OBJECT_ID_RULE).message(_validators.OBJECT_ID_RULE_MESSAGE).allow(null).optional(),
-            replyToUserDisplayName: _joi["default"].string().allow(null).optional()
+            replyToUserDisplayName: _joi["default"].string().max(100).allow(null).optional()
           });
           _context.prev = 1;
           _context.next = 4;
@@ -122,7 +122,7 @@ var updateComment = /*#__PURE__*/function () {
       while (1) switch (_context4.prev = _context4.next) {
         case 0:
           correctCondition = _joi["default"].object({
-            content: _joi["default"].string().required().trim().strict()
+            content: _joi["default"].string().required().min(1).max(5000).trim().strict()
           });
           _context4.prev = 1;
           _context4.next = 4;
