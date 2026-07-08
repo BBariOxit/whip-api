@@ -15,6 +15,7 @@ import http from 'http'
 import { cardCommentSocket } from './sockets/cardCommentSocket'
 import { socketAuthMiddleware } from './sockets/socketAuth'
 import { notificationModel } from '~/models/notificationModel'
+import { workspaceActivityModel } from '~/models/workspaceActivityModel'
 
 const START_SERVER = () => {
   const app = express()
@@ -84,11 +85,12 @@ const START_SERVER = () => {
     console.log('1. Connecting to mongoDB atlas ...')
     await CONNECT_DB()
     console.log('2. Connected to mongoDB atlas')
-    // Tạo index cho notifications (idempotent) — best-effort, không chặn khởi động
+    // Tạo index cho notifications + workspace activities (idempotent) — best-effort, không chặn khởi động
     try {
       await notificationModel.initIndexes()
+      await workspaceActivityModel.initIndexes()
     } catch (indexErr) {
-      console.error('notification initIndexes failed:', indexErr?.message)
+      console.error('initIndexes failed:', indexErr?.message)
     }
     START_SERVER()
   } catch (error) {

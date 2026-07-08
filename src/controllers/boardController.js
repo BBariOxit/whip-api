@@ -3,7 +3,8 @@ import { boardService } from '~/services/boardService'
 import { cardService } from '~/services/cardService'
 import { columnService } from '~/services/columnService'
 import { notificationService } from '~/services/notificationService'
-import { NOTIFICATION_TYPES } from '~/utils/constants'
+import { workspaceActivityService } from '~/services/workspaceActivityService'
+import { NOTIFICATION_TYPES, WORKSPACE_ACTIVITY_TYPES } from '~/utils/constants'
 
 
 const createNew = async (req, res, next) => {
@@ -29,6 +30,15 @@ const createNew = async (req, res, next) => {
         boardTitle: createBoard.title,
         boardId: createBoard._id.toString(),
         actorId: userId
+      })
+
+      // Ghi Activity Log của workspace: ai đã tạo board nào
+      workspaceActivityService.log({
+        workspaceId: createBoard.workspaceId.toString(),
+        actorId: userId,
+        actionType: WORKSPACE_ACTIVITY_TYPES.BOARD_CREATED,
+        targetName: createBoard.title,
+        metadata: { boardId: createBoard._id.toString() }
       })
     }
   } catch (error) {
@@ -121,6 +131,14 @@ const deleteItem = async (req, res, next) => {
         workspaceId: result.workspaceId.toString(),
         boardTitle: result.boardTitle,
         actorId: req.jwtDecoded._id
+      })
+
+      // Ghi Activity Log của workspace: ai đã xoá board nào
+      workspaceActivityService.log({
+        workspaceId: result.workspaceId.toString(),
+        actorId: req.jwtDecoded._id,
+        actionType: WORKSPACE_ACTIVITY_TYPES.BOARD_DELETED,
+        targetName: result.boardTitle
       })
     }
   } catch (error) {

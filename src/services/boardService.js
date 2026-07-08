@@ -257,19 +257,10 @@ const bulkDeleteItems = async (userId, boardIds) => {
       ownerIds: { $all: [new ObjectId(userId)] }
     }).toArray()
 
-    // Enforce workspace boardDeletion setting cho từng board
-    // Lọc ra những board mà user thực sự được phép xóa
-    const allowedBoardIds = []
-    for (const board of boardsToDelete) {
-      if (board.workspaceId) {
-        const workspace = await workspaceModel.findById(board.workspaceId.toString())
-        // Nếu user là board owner (ownerIds) thì luôn được xóa (vì họ là admin của board)
-        // bulkDelete đã filter ownerIds rồi nên đến được đây đều là board admin → luôn cho phép
-        allowedBoardIds.push(board._id)
-      } else {
-        allowedBoardIds.push(board._id)
-      }
-    }
+    // Không cần check workspace.boardDeletion ở đây: query trên đã filter theo ownerIds,
+    // nên mọi board đến được bước này đều do chính user tạo (board admin) → luôn được xóa,
+    // nhất quán với deleteItem (creator xóa được board của mình bất kể setting).
+    const allowedBoardIds = boardsToDelete.map(board => board._id)
 
     if (allowedBoardIds.length > 0) {
       // Delete boards

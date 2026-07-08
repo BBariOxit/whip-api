@@ -99,11 +99,26 @@ const updateNotificationPrefs = async (req, res, next) => {
   }
 }
 
+const getActivities = async (req, res, next) => {
+  const correctCondition = Joi.object({
+    page: Joi.number().integer().min(1).default(1),
+    limit: Joi.number().integer().min(1).max(50).default(10)
+  })
+
+  try {
+    await correctCondition.validateAsync(req.query, { abortEarly: false, allowUnknown: false })
+    next()
+  } catch (error) {
+    next(new ApiError(StatusCodes.UNPROCESSABLE_ENTITY, new Error(error).message))
+  }
+}
+
 export const workspaceValidation = {
   createNew,
   update,
   inviteMember,
   updateMemberRole,
   transferOwnership,
-  updateNotificationPrefs
+  updateNotificationPrefs,
+  getActivities
 }

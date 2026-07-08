@@ -1,5 +1,6 @@
 import { StatusCodes } from 'http-status-codes'
 import { workspaceService } from '~/services/workspaceService'
+import { workspaceActivityService } from '~/services/workspaceActivityService'
 import ApiError from '~/utils/ApiError'
 
 const createNew = async (req, res, next) => {
@@ -46,8 +47,9 @@ const deleteItem = async (req, res, next) => {
 
 const update = async (req, res, next) => {
   try {
+    const actorId = req.jwtDecoded._id
     const workspaceId = req.params.id
-    const updatedWorkspace = await workspaceService.update(workspaceId, req.body)
+    const updatedWorkspace = await workspaceService.update(actorId, workspaceId, req.body)
     res.status(StatusCodes.OK).json(updatedWorkspace)
   } catch (error) {
     next(error)
@@ -142,9 +144,10 @@ const transferOwnership = async (req, res, next) => {
 
 const updateLogo = async (req, res, next) => {
   try {
+    const actorId = req.jwtDecoded._id
     const workspaceId = req.params.id
     const logoFile = req.file
-    const result = await workspaceService.updateLogo(workspaceId, logoFile)
+    const result = await workspaceService.updateLogo(actorId, workspaceId, logoFile)
     res.status(StatusCodes.OK).json(result)
   } catch (error) {
     next(error)
@@ -156,6 +159,19 @@ const updateNotificationPrefs = async (req, res, next) => {
     const userId = req.jwtDecoded._id
     const workspaceId = req.params.id
     const result = await workspaceService.updateNotificationPrefs(userId, workspaceId, req.body)
+    res.status(StatusCodes.OK).json(result)
+  } catch (error) {
+    next(error)
+  }
+}
+
+// Đọc Activity Log của workspace (mọi member active đều xem được — RBAC ở tầng route)
+const getActivities = async (req, res, next) => {
+  try {
+    const workspaceId = req.params.id
+    const page = Math.max(1, parseInt(req.query.page) || 1)
+    const limit = parseInt(req.query.limit) || 10
+    const result = await workspaceActivityService.getActivities(workspaceId, page, limit)
     res.status(StatusCodes.OK).json(result)
   } catch (error) {
     next(error)
@@ -176,5 +192,6 @@ export const workspaceController = {
   getMembers,
   transferOwnership,
   updateLogo,
-  updateNotificationPrefs
+  updateNotificationPrefs,
+  getActivities
 }

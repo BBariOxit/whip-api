@@ -85,3 +85,21 @@ export const ACTIVITY_ACTION_TYPES = {
   REMOVE_ATTACHMENT: 'REMOVE_ATTACHMENT',
   ARCHIVE_CARD: 'ARCHIVE_CARD'
 }
+
+// Các loại hoạt động ở PHẠM VI WORKSPACE (khác với ACTIVITY_ACTION_TYPES vốn gắn với 1 card).
+// Được ghi bởi server khi các sự kiện tương ứng xảy ra và hiển thị ở "Activity Log" trong Settings.
+export const WORKSPACE_ACTIVITY_TYPES = {
+  BOARD_CREATED: 'BOARD_CREATED',
+  BOARD_DELETED: 'BOARD_DELETED',
+  MEMBER_INVITED: 'MEMBER_INVITED',
+  MEMBER_JOINED: 'MEMBER_JOINED',
+  MEMBER_LEFT: 'MEMBER_LEFT',
+  MEMBER_REMOVED: 'MEMBER_REMOVED',
+  MEMBER_ROLE_CHANGED: 'MEMBER_ROLE_CHANGED',
+  SETTINGS_CHANGED: 'SETTINGS_CHANGED',
+  OWNERSHIP_TRANSFERRED: 'OWNERSHIP_TRANSFERRED'
+}
+
+// Số ngày giữ activity của workspace trước khi TTL index của Mongo tự xoá.
+// Muốn giữ lịch sử lâu hơn (VD audit dài hạn) chỉ cần tăng số này.
+export const WORKSPACE_ACTIVITY_TTL_DAYS = 30

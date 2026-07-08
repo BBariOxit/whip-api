@@ -66,4 +66,8 @@ Router.route('/:id/logo')
 Router.route('/:id/notifications')
   .put(authMiddleware.isAuthorized, requireWorkspaceRole([OWNER, ADMIN, MEMBER]), workspaceValidation.updateNotificationPrefs, workspaceController.updateNotificationPrefs)
 
+// Activity Log của workspace — minh bạch: mọi member active đều xem được (ghi log thì chỉ server-side)
+Router.route('/:id/activities')
+  .get(authMiddleware.isAuthorized, requireWorkspaceRole([OWNER, ADMIN, MEMBER]), workspaceValidation.getActivities, workspaceController.getActivities)
+
 export const workspaceRoute = Router
