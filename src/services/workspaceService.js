@@ -14,7 +14,20 @@ import { env } from '~/config/environment'
 import { brevoProvider } from '~/providers/brevoProvider'
 import { cloudinaryProvider } from '~/providers/CloudinaryProvider'
 import { notificationService } from './notificationService'
-import { NOTIFICATION_TYPES } from '~/utils/constants'
+import { workspaceActivityService } from './workspaceActivityService'
+import { NOTIFICATION_TYPES, WORKSPACE_ACTIVITY_TYPES } from '~/utils/constants'
+
+// Lấy tên hiển thị đẹp cho 1 member (dùng cho targetName trong activity log).
+// Member đã có tài khoản -> displayName; member pending -> fallback về email.
+const resolveMemberName = async (memberUserId, fallbackEmail) => {
+  if (!memberUserId) return fallbackEmail || null
+  try {
+    const user = await userModel.findOneById(memberUserId)
+    return user?.displayName || user?.username || user?.email || fallbackEmail || null
+  } catch {
+    return fallbackEmail || null
+  }
+}
 
 const createNew = async (userId, email, reqBody) => {
   try {
@@ -81,7 +94,7 @@ const deleteItem = async (userId, workspaceId) => {
   }
 }
 
-const update = async (workspaceId, reqBody) => {
+const update = async (actorId, workspaceId, reqBody) => {
   try {
     // Chỉ cho phép cập nhật các field an toàn (tránh mass-assignment: _destroy, members, ...)
     const ALLOWED_FIELDS = ['title', 'description', 'visibility', 'invitePermission', 'boardCreation', 'boardDeletion']
@@ -89,7 +102,31 @@ const update = async (workspaceId, reqBody) => {
     for (const field of ALLOWED_FIELDS) {
       if (reqBody[field] !== undefined) updateData[field] = reqBody[field]
     }
+
+    // Lấy bản ghi trước khi cập nhật để so sánh, chỉ ghi activity cho field thực sự đổi giá trị
+    const before = await workspaceModel.findById(workspaceId)
     const updatedWorkspace = await workspaceModel.update(workspaceId, updateData)
+
+    // Ghi Activity Log (best-effort) cho các thay đổi "macro" ở Settings.
+    // Rename (title) tách riêng để FE render "renamed workspace to X"; các field còn lại là "changed X to Y".
+    // Bỏ qua description (thay đổi vặt, gây nhiễu log).
+    if (before) {
+      if (updateData.title !== undefined && updateData.title !== before.title) {
+        workspaceActivityService.log({
+          workspaceId, actorId, actionType: WORKSPACE_ACTIVITY_TYPES.SETTINGS_CHANGED,
+          targetName: updateData.title, metadata: { settingKey: 'title', settingValue: updateData.title }
+        })
+      }
+      for (const key of ['visibility', 'invitePermission', 'boardCreation', 'boardDeletion']) {
+        if (updateData[key] !== undefined && updateData[key] !== before[key]) {
+          workspaceActivityService.log({
+            workspaceId, actorId, actionType: WORKSPACE_ACTIVITY_TYPES.SETTINGS_CHANGED,
+            metadata: { settingKey: key, settingValue: updateData[key] }
+          })
+        }
+      }
+    }
+
     return updatedWorkspace
   } catch (error) {
     throw error
@@ -131,6 +168,14 @@ const transferOwnership = async (actorUserId, workspaceId, newOwnerUserId) => {
     }
 
     const updatedWorkspace = await workspaceModel.transferOwnership(workspaceId, actorUserId, newOwnerUserId)
+
+    // Ghi Activity Log (best-effort): owner cũ đã chuyển quyền sở hữu cho ai
+    const newOwnerName = await resolveMemberName(targetMember.userId, targetMember.email)
+    workspaceActivityService.log({
+      workspaceId, actorId: actorUserId, actionType: WORKSPACE_ACTIVITY_TYPES.OWNERSHIP_TRANSFERRED,
+      targetName: newOwnerName
+    })
+
     return updatedWorkspace
   } catch (error) {
     throw error
@@ -170,7 +215,7 @@ const updateNotificationPrefs = async (userId, workspaceId, prefs) => {
 /**
  * Upload / cập nhật logo workspace (Cloudinary)
  */
-const updateLogo = async (workspaceId, logoFile) => {
+const updateLogo = async (actorId, workspaceId, logoFile) => {
   try {
     if (!logoFile) {
       throw new ApiError(StatusCodes.BAD_REQUEST, 'No logo file provided!')
@@ -180,6 +225,13 @@ const updateLogo = async (workspaceId, logoFile) => {
       logo: uploadResult.secure_url,
       updatedAt: Date.now()
     })
+
+    // Ghi Activity Log (best-effort): đổi logo workspace
+    workspaceActivityService.log({
+      workspaceId, actorId, actionType: WORKSPACE_ACTIVITY_TYPES.SETTINGS_CHANGED,
+      metadata: { settingKey: 'logo' }
+    })
+
     return updatedWorkspace
   } catch (error) {
     throw error
@@ -265,6 +317,12 @@ const inviteMember = async (inviterId, workspaceId, reqBody) => {
       // Optional: rollback if email fails, but usually we just warn.
     }
 
+    // Ghi Activity Log (best-effort): ai đã mời email nào
+    workspaceActivityService.log({
+      workspaceId, actorId: inviterId, actionType: WORKSPACE_ACTIVITY_TYPES.MEMBER_INVITED,
+      targetName: inviteeEmail, metadata: { role: memberRole }
+    })
+
     return { message: 'Invitation sent successfully!', newMember: newPendingMember }
   } catch (error) {
     throw error
@@ -302,6 +360,11 @@ const acceptInvite = async (userId, userEmail, token, workspaceId) => {
       recipientIds: existingActiveMemberIds,
       actorId: userId,
       context: { workspaceTitle: workspace.title }
+    })
+
+    // Ghi Activity Log (best-effort): thành viên mới đã tham gia workspace
+    workspaceActivityService.log({
+      workspaceId, actorId: userId, actionType: WORKSPACE_ACTIVITY_TYPES.MEMBER_JOINED
     })
 
     return { message: 'Invitation accepted successfully!', workspaceId }
@@ -357,6 +420,13 @@ const removeMember = async (actorUserId, workspaceId, targetUserId) => {
 
     // Xóa member khỏi workspace (dùng targetUserId, nếu truyền email thì xoá bằng email)
     const updatedWorkspace = await workspaceModel.removeMember(workspaceId, targetUserId)
+
+    // Ghi Activity Log (best-effort): actor đã kick member nào ra khỏi workspace
+    const removedName = await resolveMemberName(targetMember.userId, targetMember.email)
+    workspaceActivityService.log({
+      workspaceId, actorId: actorUserId, actionType: WORKSPACE_ACTIVITY_TYPES.MEMBER_REMOVED,
+      targetName: removedName
+    })
 
     const workspaceOwner = workspace.members.find(m => m.role === WORKSPACE_ROLES.OWNER)
 
@@ -415,6 +485,14 @@ const updateMemberRole = async (actorUserId, workspaceId, targetUserId, newRole)
     }
 
     const updatedWorkspace = await workspaceModel.updateMemberRole(workspaceId, targetUserId, newRole)
+
+    // Ghi Activity Log (best-effort): actor đã đổi quyền của member nào thành role gì
+    const targetName = await resolveMemberName(targetMember.userId, targetMember.email)
+    workspaceActivityService.log({
+      workspaceId, actorId: actorUserId, actionType: WORKSPACE_ACTIVITY_TYPES.MEMBER_ROLE_CHANGED,
+      targetName, metadata: { newRole }
+    })
+
     return updatedWorkspace
   } catch (error) {
     throw error
@@ -450,6 +528,11 @@ const leaveWorkspace = async (userId, workspaceId) => {
 
     // Xóa member khỏi workspace
     const updatedWorkspace = await workspaceModel.removeMember(workspaceId, userId)
+
+    // Ghi Activity Log (best-effort): thành viên tự rời workspace
+    workspaceActivityService.log({
+      workspaceId, actorId: userId, actionType: WORKSPACE_ACTIVITY_TYPES.MEMBER_LEFT
+    })
 
     const workspaceOwner = workspace.members.find(m => m.role === WORKSPACE_ROLES.OWNER)
 
