@@ -45,6 +45,21 @@ const deleteItem = async (req, res, next) => {
   }
 }
 
+const exportData = async (req, res, next) => {
+  try {
+    const workspaceId = req.params.id
+    const data = await workspaceService.exportData(workspaceId)
+
+    // Tên file an toàn: chỉ dùng id + ngày, tránh chèn ký tự lạ từ title người dùng vào header.
+    const filename = `whip-workspace-${workspaceId}-${new Date().toISOString().slice(0, 10)}.json`
+    res.setHeader('Content-Type', 'application/json; charset=utf-8')
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`)
+    res.status(StatusCodes.OK).send(JSON.stringify(data, null, 2))
+  } catch (error) {
+    next(error)
+  }
+}
+
 const update = async (req, res, next) => {
   try {
     const actorId = req.jwtDecoded._id
@@ -183,6 +198,7 @@ export const workspaceController = {
   getWorkspacesByUserId,
   getDetails,
   deleteItem,
+  exportData,
   update,
   inviteMember,
   acceptInvite,

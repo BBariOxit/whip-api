@@ -94,6 +94,64 @@ const deleteItem = async (userId, workspaceId) => {
   }
 }
 
+// Export toàn bộ dữ liệu workspace (boards + columns + cards + members) ra JSON thuần.
+// Chỉ ĐỌC, không đổi dữ liệu. Các field nhạy cảm đã được loại bỏ ngay từ tầng model:
+//   - getDetailsWithMembers: project bỏ password/verifyToken và KHÔNG đẩy inviteToken ra ngoài.
+//   - getDetails (board): project bỏ password/verifyToken của owners/members.
+// Ở đây chỉ pick lại đúng các field cần thiết để payload gọn và không rò rỉ thêm gì.
+const exportData = async (workspaceId) => {
+  try {
+    const workspace = await workspaceModel.getDetailsWithMembers(workspaceId)
+    if (!workspace) {
+      throw new ApiError(StatusCodes.NOT_FOUND, 'Workspace not found!')
+    }
+
+    // Lấy các board còn sống (findByWorkspaceId đã lọc _destroy: false),
+    // sau đó dùng aggregate getDetails có sẵn để kèm columns/cards/labels — tránh N+1 query thủ công.
+    const boards = await boardModel.findByWorkspaceId(workspaceId)
+    const boardDetails = await Promise.all(
+      boards.map((board) => boardModel.getDetails(null, board._id.toString()))
+    )
+
+    const exportedBoards = boardDetails
+      .filter(Boolean) // phòng thủ: bỏ qua board vừa bị xoá giữa 2 query
+      .map((board) => ({
+        _id: board._id,
+        title: board.title,
+        description: board.description,
+        type: board.type,
+        columnOrderIds: board.columnOrderIds,
+        columns: board.columns,
+        cards: board.cards,
+        labels: board.labels
+      }))
+
+    return {
+      schemaVersion: 1,
+      exportedAt: new Date().toISOString(),
+      workspace: {
+        _id: workspace._id,
+        title: workspace.title,
+        description: workspace.description,
+        visibility: workspace.visibility,
+        createdAt: workspace.createdAt,
+        // members đã sạch từ getDetailsWithMembers; chỉ giữ lại field public, bỏ notificationPrefs (dữ liệu cá nhân)
+        members: (workspace.members || []).map((m) => ({
+          userId: m.userId,
+          email: m.email,
+          displayName: m.displayName,
+          role: m.role,
+          status: m.status,
+          joinedAt: m.joinedAt
+        }))
+      },
+      boards: exportedBoards
+    }
+  } catch (error) {
+    throw error
+  }
+}
+
 const update = async (actorId, workspaceId, reqBody) => {
   try {
     // Chỉ cho phép cập nhật các field an toàn (tránh mass-assignment: _destroy, members, ...)
@@ -612,6 +670,7 @@ export const workspaceService = {
   getWorkspacesByUserId,
   getDetails,
   deleteItem,
+  exportData,
   update,
   inviteMember,
   acceptInvite,

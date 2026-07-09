@@ -36,6 +36,10 @@ Router.route('/:id')
   // Chỉ Owner xóa workspace
   .delete(authMiddleware.isAuthorized, requireWorkspaceRole([OWNER]), workspaceController.deleteItem)
 
+// Export toàn bộ dữ liệu workspace ra JSON (chỉ Owner + Admin — khớp canManage ở FE)
+Router.route('/:id/export')
+  .get(authMiddleware.isAuthorized, requireWorkspaceRole([OWNER, ADMIN]), workspaceController.exportData)
+
 // Member management
 Router.route('/:id/members')
   // Mọi member đều xem được danh sách members
