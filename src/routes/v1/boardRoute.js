@@ -21,9 +21,18 @@ Router.route('/templates/clone')
 Router.route('/bulk-delete')
   .delete(authMiddleware.isAuthorized, boardController.bulkDeleteItems)
 
+// Import 1 board từ file JSON → board mới trong Personal Boards của người gọi (tự làm owner).
+// Chỉ cần đăng nhập; khai báo TRƯỚC '/:id' để Express không match 'import' thành param :id.
+Router.route('/import')
+  .post(authMiddleware.isAuthorized, boardValidation.importBoard, boardController.importBoard)
+
 // Lưu ý: phải khai báo TRƯỚC route '/:id' để Express không match '/starred' thành param :id
 Router.route('/starred')
   .get(authMiddleware.isAuthorized, boardController.getStarredBoards)
+
+// Export toàn bộ board ra JSON — chỉ owner (admin) + member của board (viewer không được).
+Router.route('/:id/export')
+  .get(authMiddleware.isAuthorized, requireBoardRole(['admin', 'member']), boardController.exportBoard)
 
 Router.route('/:id/archived-items')
   .get(authMiddleware.isAuthorized, requireBoardRole(['admin', 'member']), boardController.getArchivedItems)

@@ -9,10 +9,11 @@ import { userModel } from '~/models/userModel'
 import ApiError from '~/utils/ApiError'
 import { StatusCodes } from 'http-status-codes'
 import { OBJECT_ID_RULE } from '~/utils/validators'
-import { DEFAULT_PAGE, DEFAULT_ITEMS_PER_PAGE, WORKSPACE_ROLES } from '~/utils/constants'
+import { DEFAULT_PAGE, DEFAULT_ITEMS_PER_PAGE, WORKSPACE_ROLES, BOARD_TYPES } from '~/utils/constants'
 import { workspaceModel } from '~/models/workspaceModel'
 import { ObjectId } from 'mongodb'
 import { getBoardAccessRole } from '~/middlewares/rbacMiddleware'
+import { buildBoardDocs } from '~/utils/importHelpers'
 
 const createNew = async (userId, reqBody) => {
   try {
@@ -47,6 +48,62 @@ const createNew = async (userId, reqBody) => {
     // trả kq về , trong service luôn phải có return
     // (thông báo "board created" in-app do controller bắn vì cần io)
     return getNewBoard
+  } catch (error) {
+    throw error
+  }
+}
+
+// Export 1 board ra JSON thuần (board + columns + cards + labels + customFields).
+// Quyền đã được chặn ở route bằng requireBoardRole(['admin','member']) → chỉ owner/member export được.
+const exportData = async (userId, boardId) => {
+  try {
+    if (!OBJECT_ID_RULE.test(boardId)) {
+      throw new ApiError(StatusCodes.BAD_REQUEST, 'Invalid board id')
+    }
+    const board = await boardModel.getDetails(userId, boardId)
+    if (!board) {
+      throw new ApiError(StatusCodes.NOT_FOUND, 'board not found!')
+    }
+
+    return {
+      schemaVersion: 1,
+      kind: 'board',
+      exportedAt: new Date().toISOString(),
+      board: {
+        _id: board._id,
+        title: board.title,
+        description: board.description,
+        type: board.type,
+        background: board.background,
+        columnOrderIds: board.columnOrderIds,
+        columns: board.columns, // đã lọc _destroy: false từ aggregate getDetails
+        cards: board.cards,
+        labels: board.labels,
+        customFields: board.customFields
+      }
+    }
+  } catch (error) {
+    throw error
+  }
+}
+
+// Import 1 board lẻ từ file JSON → tạo board mới trong Personal Boards của người import.
+// Ép PRIVATE vì không có ngữ cảnh workspace (giống cloneTemplate). Người import là owner duy nhất.
+// reqBody đã được validation strip sạch (chỉ còn field whitelist).
+const importBoard = async (userId, reqBody) => {
+  try {
+    const ownerObjectId = new ObjectId(userId)
+    const { boardDoc, columnDocs, cardDocs, labelDocs } = buildBoardDocs(reqBody.board, {
+      ownerObjectId,
+      workspaceId: null,
+      forceType: BOARD_TYPES.PRIVATE
+    })
+
+    const newBoardId = await boardModel.importBoard({ boardDoc, columnDocs, cardDocs, labelDocs })
+    return {
+      boardId: newBoardId,
+      counts: { columns: columnDocs.length, cards: cardDocs.length, labels: labelDocs.length }
+    }
   } catch (error) {
     throw error
   }
@@ -552,6 +609,8 @@ const toggleStarred = async (userId, boardId) => {
 
 export const boardService = {
   createNew,
+  exportData,
+  importBoard,
   getDetails,
   update,
   updateVisibility,

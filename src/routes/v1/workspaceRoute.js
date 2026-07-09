@@ -23,6 +23,12 @@ Router.route('/')
 Router.route('/accept-invite')
   .put(authMiddleware.isAuthorized, workspaceController.acceptInvite)
 
+// Import: tạo workspace MỚI từ file JSON đã export. Mọi user đăng nhập đều dùng được
+// (họ tự trở thành owner của workspace mới) → không gắn workspace-role check.
+// Đặt trước block '/:id' để tránh nhầm 'import' thành tham số :id.
+Router.route('/import')
+  .post(authMiddleware.isAuthorized, workspaceValidation.importWorkspace, workspaceController.importData)
+
 // =============================================
 // Routes CẦN workspace role check (RBAC)
 // =============================================

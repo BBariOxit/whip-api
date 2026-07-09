@@ -62,6 +62,31 @@ const getDetails = async (req, res, next) => {
   }
 }
 
+const exportBoard = async (req, res, next) => {
+  try {
+    const userId = req.jwtDecoded?._id
+    const boardId = req.params.id
+    const data = await boardService.exportData(userId, boardId)
+
+    const filename = `whip-board-${boardId}-${new Date().toISOString().slice(0, 10)}.json`
+    res.setHeader('Content-Type', 'application/json; charset=utf-8')
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`)
+    res.status(StatusCodes.OK).send(JSON.stringify(data, null, 2))
+  } catch (error) {
+    next(error)
+  }
+}
+
+const importBoard = async (req, res, next) => {
+  try {
+    const userId = req.jwtDecoded._id
+    const result = await boardService.importBoard(userId, req.body)
+    res.status(StatusCodes.CREATED).json(result)
+  } catch (error) {
+    next(error)
+  }
+}
+
 const update = async (req, res, next) => {
   try {
     const boardId = req.params.id
@@ -257,6 +282,8 @@ const toggleStarred = async (req, res, next) => {
 
 export const boardController = {
   createNew,
+  exportBoard,
+  importBoard,
   getDetails,
   update,
   updateVisibility,

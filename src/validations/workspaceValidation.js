@@ -3,6 +3,7 @@ import { StatusCodes } from 'http-status-codes'
 import ApiError from '~/utils/ApiError'
 import { WORKSPACE_ROLES } from '~/utils/constants'
 import { EMAIL_RULE, EMAIL_RULE_MESSAGE, OBJECT_ID_RULE, OBJECT_ID_RULE_MESSAGE } from '~/utils/validators'
+import { boardImportSchema } from '~/validations/importSchemas'
 
 const createNew = async (req, res, next) => {
   const correctCondition = Joi.object({
@@ -113,9 +114,44 @@ const getActivities = async (req, res, next) => {
   }
 }
 
+// Validate file import (INPUT KHÔNG TIN CẬY). Chỉ cho phép đúng các field trong whitelist:
+// stripUnknown sẽ tự loại bỏ mọi field lạ / nhạy cảm (attachments, memberIds, totalComments,
+// _destroy, isTemplate, slug, ownerIds...) trước khi service dựng document ghi xuống DB.
+// Đồng thời giới hạn kích thước mảng để chống DoS bằng file khổng lồ.
+const importWorkspace = async (req, res, next) => {
+  const correctCondition = Joi.object({
+    schemaVersion: Joi.number().valid(1).required(),
+    // Chặn nhầm file: file board (kind: 'board') sẽ không qua được cửa này.
+    // Cho phép thiếu kind (mặc định 'workspace') để tương thích file export cũ chưa có trường này.
+    kind: Joi.string().valid('workspace').default('workspace'),
+    exportedAt: Joi.any().optional(),
+    workspace: Joi.object({
+      title: Joi.string().min(3).max(50).required(),
+      description: Joi.string().max(256).allow('').default(''),
+      visibility: Joi.string().valid('private', 'public').default('private')
+    }).required(),
+    boards: Joi.array().max(100).items(boardImportSchema).default([])
+  })
+
+  try {
+    // Gán lại req.body bằng bản đã được strip sạch để tầng dưới chỉ thấy dữ liệu hợp lệ.
+    req.body = await correctCondition.validateAsync(req.body, {
+      abortEarly: false,
+      stripUnknown: true,
+      convert: true
+    })
+    next()
+  } catch (error) {
+    const errorMessage = new Error(error).message
+    const customError = new ApiError(StatusCodes.UNPROCESSABLE_ENTITY, errorMessage)
+    next(customError)
+  }
+}
+
 export const workspaceValidation = {
   createNew,
   update,
+  importWorkspace,
   inviteMember,
   updateMemberRole,
   transferOwnership,

@@ -3,6 +3,7 @@ import { StatusCodes } from 'http-status-codes'
 import ApiError from '~/utils/ApiError'
 import { BOARD_TYPES } from '~/utils/constants'
 import { OBJECT_ID_RULE, OBJECT_ID_RULE_MESSAGE } from '~/utils/validators'
+import { boardImportSchema } from '~/validations/importSchemas'
 
 const createNew = async (req, res, next) => {
   // * Note: Mặc định chúng ta không cần phải custom message ở phía BE làm gì vì để cho Front-end tự validate và custom message phía FE cho đẹp. 
@@ -117,9 +118,35 @@ const moveCardifferentColumn = async (req, res, next) => {
   }
 }
 
+// Validate file import board (INPUT KHÔNG TIN CẬY). Whitelist + stripUnknown loại field lạ/nhạy cảm.
+// req.body được gán lại bằng bản đã strip sạch để service chỉ thấy dữ liệu hợp lệ.
+const importBoard = async (req, res, next) => {
+  const correctCondition = Joi.object({
+    schemaVersion: Joi.number().valid(1).required(),
+    // Bắt buộc kind = 'board' để KHÔNG thể import nhầm file workspace vào đây.
+    kind: Joi.string().valid('board').required(),
+    exportedAt: Joi.any().optional(),
+    board: boardImportSchema.required()
+  })
+
+  try {
+    req.body = await correctCondition.validateAsync(req.body, {
+      abortEarly: false,
+      stripUnknown: true,
+      convert: true
+    })
+    next()
+  } catch (error) {
+    const errorMessage = new Error(error).message
+    const customError = new ApiError(StatusCodes.UNPROCESSABLE_ENTITY, errorMessage)
+    next(customError)
+  }
+}
+
 export const boardValidation = {
   createNew,
   update,
   cloneTemplate,
-  moveCardifferentColumn
+  moveCardifferentColumn,
+  importBoard
 }

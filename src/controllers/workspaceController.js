@@ -60,6 +60,17 @@ const exportData = async (req, res, next) => {
   }
 }
 
+const importData = async (req, res, next) => {
+  try {
+    const userId = req.jwtDecoded._id
+    const email = req.jwtDecoded.email
+    const result = await workspaceService.importData(userId, email, req.body)
+    res.status(StatusCodes.CREATED).json(result)
+  } catch (error) {
+    next(error)
+  }
+}
+
 const update = async (req, res, next) => {
   try {
     const actorId = req.jwtDecoded._id
@@ -199,6 +210,7 @@ export const workspaceController = {
   getDetails,
   deleteItem,
   exportData,
+  importData,
   update,
   inviteMember,
   acceptInvite,

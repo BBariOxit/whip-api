@@ -1,6 +1,6 @@
 import Joi from 'joi'
 import { ObjectId } from 'mongodb'
-import { GET_DB } from '~/config/mongodb'
+import { GET_DB, GET_CLIENT } from '~/config/mongodb'
 import { WORKSPACE_ROLES } from '~/utils/constants'
 import { OBJECT_ID_RULE, OBJECT_ID_RULE_MESSAGE, EMAIL_RULE, EMAIL_RULE_MESSAGE } from '~/utils/validators'
 
@@ -388,8 +388,31 @@ const getDetailsWithMembers = async (workspaceId) => {
   }
 }
 
+// Ghi toàn bộ workspace + boards/columns/cards/labels trong MỘT transaction (all-or-nothing).
+// Nếu bất kỳ bước nào lỗi, transaction rollback => không để lại workspace/board mồ côi.
+// Dùng string literal cho tên collection khác (giống cách boardModel tham chiếu 'workspaces')
+// để tránh vòng lặp import giữa các model.
+const importWorkspace = async ({ workspaceDoc, boardDocs, columnDocs, cardDocs, labelDocs }) => {
+  const session = GET_CLIENT().startSession()
+  try {
+    await session.withTransaction(async () => {
+      const db = GET_DB()
+      await db.collection(WORKSPACE_COLLECTION_NAME).insertOne(workspaceDoc, { session })
+      // insertMany ném lỗi nếu mảng rỗng => chỉ ghi khi có dữ liệu.
+      if (boardDocs.length) await db.collection('boards').insertMany(boardDocs, { session })
+      if (columnDocs.length) await db.collection('columns').insertMany(columnDocs, { session })
+      if (cardDocs.length) await db.collection('cards').insertMany(cardDocs, { session })
+      if (labelDocs.length) await db.collection('labels').insertMany(labelDocs, { session })
+    })
+    return workspaceDoc._id
+  } finally {
+    await session.endSession()
+  }
+}
+
 export const workspaceModel = {
   WORKSPACE_COLLECTION_NAME,
+  importWorkspace,
   WORKSPACE_COLLECTION_SCHEMA,
   DEFAULT_NOTIFICATION_PREFS,
   updateMemberNotificationPrefs,
