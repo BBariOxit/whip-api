@@ -9,26 +9,32 @@ import { userModel } from '~/models/userModel'
 import ApiError from '~/utils/ApiError'
 import { StatusCodes } from 'http-status-codes'
 import { OBJECT_ID_RULE } from '~/utils/validators'
-import { DEFAULT_PAGE, DEFAULT_ITEMS_PER_PAGE, WORKSPACE_ROLES } from '~/utils/constants'
+import { DEFAULT_PAGE, DEFAULT_ITEMS_PER_PAGE, WORKSPACE_ROLES, BOARD_TYPES } from '~/utils/constants'
 import { workspaceModel } from '~/models/workspaceModel'
 import { ObjectId } from 'mongodb'
 import { getBoardAccessRole } from '~/middlewares/rbacMiddleware'
+import { buildBoardDocs } from '~/utils/importHelpers'
+
+// Enforce quyền tạo board trong 1 workspace (dùng chung cho createNew và duplicateBoard).
+// - Phải là member active của workspace.
+// - boardCreation = 'admin' → chỉ Owner + Admin; 'all' (default) → mọi member.
+const assertCanCreateBoardInWorkspace = async (userId, workspaceId) => {
+  const workspace = await workspaceModel.findById(workspaceId)
+  if (!workspace) throw new ApiError(StatusCodes.NOT_FOUND, 'Workspace not found!')
+
+  const actor = workspace.members.find(m => m.userId?.toString() === userId.toString() && m.status === 'active')
+  if (!actor) throw new ApiError(StatusCodes.FORBIDDEN, 'You are not a member of this workspace!')
+
+  if (workspace.boardCreation !== 'all' && actor.role === WORKSPACE_ROLES.MEMBER) {
+    throw new ApiError(StatusCodes.FORBIDDEN, 'Only Owner and Admin can create boards in this workspace.')
+  }
+}
 
 const createNew = async (userId, reqBody) => {
   try {
     // Enforce workspace boardCreation setting (chỉ áp dụng khi board thuộc workspace)
     if (reqBody.workspaceId) {
-      const workspace = await workspaceModel.findById(reqBody.workspaceId)
-      if (!workspace) throw new ApiError(StatusCodes.NOT_FOUND, 'Workspace not found!')
-
-      const actor = workspace.members.find(m => m.userId?.toString() === userId.toString() && m.status === 'active')
-      if (!actor) throw new ApiError(StatusCodes.FORBIDDEN, 'You are not a member of this workspace!')
-
-      // boardCreation = 'admin' → chỉ Owner + Admin tạo board
-      // boardCreation = 'all' (default) → tất cả member đều tạo được
-      if (workspace.boardCreation !== 'all' && actor.role === WORKSPACE_ROLES.MEMBER) {
-        throw new ApiError(StatusCodes.FORBIDDEN, 'Only Owner and Admin can create boards in this workspace.')
-      }
+      await assertCanCreateBoardInWorkspace(userId, reqBody.workspaceId)
     }
 
     // xử lý logic dữ liệu
@@ -47,6 +53,120 @@ const createNew = async (userId, reqBody) => {
     // trả kq về , trong service luôn phải có return
     // (thông báo "board created" in-app do controller bắn vì cần io)
     return getNewBoard
+  } catch (error) {
+    throw error
+  }
+}
+
+// Export 1 board ra JSON thuần (board + columns + cards + labels + customFields).
+// Quyền đã được chặn ở route bằng requireBoardRole(['admin','member']) → chỉ owner/member export được.
+const exportData = async (userId, boardId) => {
+  try {
+    if (!OBJECT_ID_RULE.test(boardId)) {
+      throw new ApiError(StatusCodes.BAD_REQUEST, 'Invalid board id')
+    }
+    const board = await boardModel.getDetails(userId, boardId)
+    if (!board) {
+      throw new ApiError(StatusCodes.NOT_FOUND, 'board not found!')
+    }
+
+    return {
+      schemaVersion: 1,
+      kind: 'board',
+      exportedAt: new Date().toISOString(),
+      board: {
+        _id: board._id,
+        title: board.title,
+        description: board.description,
+        type: board.type,
+        background: board.background,
+        columnOrderIds: board.columnOrderIds,
+        columns: board.columns, // đã lọc _destroy: false từ aggregate getDetails
+        cards: board.cards,
+        labels: board.labels,
+        customFields: board.customFields
+      }
+    }
+  } catch (error) {
+    throw error
+  }
+}
+
+// Import 1 board lẻ từ file JSON → tạo board mới trong Personal Boards của người import.
+// Ép PRIVATE vì không có ngữ cảnh workspace (giống cloneTemplate). Người import là owner duy nhất.
+// reqBody đã được validation strip sạch (chỉ còn field whitelist).
+const importBoard = async (userId, reqBody) => {
+  try {
+    const ownerObjectId = new ObjectId(userId)
+    const { boardDoc, columnDocs, cardDocs, labelDocs } = buildBoardDocs(reqBody.board, {
+      ownerObjectId,
+      workspaceId: null,
+      forceType: BOARD_TYPES.PRIVATE
+    })
+
+    const newBoardId = await boardModel.importBoard({ boardDoc, columnDocs, cardDocs, labelDocs })
+    return {
+      boardId: newBoardId,
+      counts: { columns: columnDocs.length, cards: cardDocs.length, labels: labelDocs.length }
+    }
+  } catch (error) {
+    throw error
+  }
+}
+
+// Nhân bản 1 board có sẵn thành bản sao MỚI trong CÙNG ngữ cảnh (giữ workspaceId + type).
+// Người bấm là owner duy nhất. Tái dùng đúng logic remap của import (buildBoardDocs): coi board
+// sống như một "bản export trong bộ nhớ" (JSON.stringify để ObjectId thành chuỗi, khớp shape helper cần).
+const duplicateBoard = async (userId, boardId) => {
+  try {
+    if (!OBJECT_ID_RULE.test(boardId)) {
+      throw new ApiError(StatusCodes.BAD_REQUEST, 'Invalid board id')
+    }
+    const board = await boardModel.getDetails(userId, boardId)
+    if (!board) {
+      throw new ApiError(StatusCodes.NOT_FOUND, 'board not found!')
+    }
+
+    // Gatekeeper xem: board private thì chỉ owner/member mới được đọc → mới được duplicate.
+    const isOwner = board.ownerIds?.some(id => id.toString() === userId)
+    const isMember = board.memberIds?.some(id => id.toString() === userId)
+    if (board.type === BOARD_TYPES.PRIVATE && !isOwner && !isMember) {
+      throw new ApiError(StatusCodes.FORBIDDEN, 'Access denied. You cannot duplicate this private board.')
+    }
+
+    // Nếu board thuộc workspace: bản sao cũng vào workspace đó → phải có quyền tạo board ở đây.
+    if (board.workspaceId) {
+      await assertCanCreateBoardInWorkspace(userId, board.workspaceId.toString())
+    }
+
+    // Tên bản sao có hậu tố "(Copy)", cắt bớt gốc nếu vượt 50 ký tự để vẫn hợp lệ khi sửa tên sau.
+    const suffix = ' (Copy)'
+    const dupTitle = (board.title + suffix).length > 50
+      ? board.title.slice(0, 50 - suffix.length) + suffix
+      : board.title + suffix
+
+    // JSON hoá board sống → shape giống file export (ObjectId thành chuỗi) để buildBoardDocs remap.
+    const src = JSON.parse(JSON.stringify(board))
+    const boardForBuild = {
+      title: dupTitle,
+      description: src.description,
+      type: src.type, // GIỮ nguyên type (không ép private như import board lẻ)
+      background: src.background,
+      columnOrderIds: src.columnOrderIds,
+      columns: src.columns,
+      cards: src.cards,
+      labels: src.labels,
+      customFields: src.customFields
+    }
+
+    const { boardDoc, columnDocs, cardDocs, labelDocs } = buildBoardDocs(boardForBuild, {
+      ownerObjectId: new ObjectId(userId),
+      workspaceId: board.workspaceId ? new ObjectId(board.workspaceId) : null // GIỮ workspace của nguồn
+    })
+
+    const newBoardId = await boardModel.importBoard({ boardDoc, columnDocs, cardDocs, labelDocs })
+    // Trả về board object đầy đủ để FE chèn card ngay cạnh bản gốc.
+    return await boardModel.findOneById(newBoardId)
   } catch (error) {
     throw error
   }
@@ -552,6 +672,9 @@ const toggleStarred = async (userId, boardId) => {
 
 export const boardService = {
   createNew,
+  exportData,
+  importBoard,
+  duplicateBoard,
   getDetails,
   update,
   updateVisibility,

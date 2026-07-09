@@ -6,6 +6,7 @@ import { invitationModel } from '~/models/invitationModel'
 import { StatusCodes } from 'http-status-codes'
 import ApiError from '~/utils/ApiError'
 import { WORKSPACE_ROLES, INVITATION_TYPES, BOARD_INVITATION_STATUS } from '~/utils/constants'
+import { buildBoardDocs } from '~/utils/importHelpers'
 import { GET_DB } from '~/config/mongodb'
 import { ObjectId } from 'mongodb'
 
@@ -89,6 +90,131 @@ const deleteItem = async (userId, workspaceId) => {
     await workspaceModel.deleteOneById(workspaceId)
 
     return { deleteResult: 'Workspace and all related Boards deleted successfully!' }
+  } catch (error) {
+    throw error
+  }
+}
+
+// Export toàn bộ dữ liệu workspace (boards + columns + cards + members) ra JSON thuần.
+// Chỉ ĐỌC, không đổi dữ liệu. Các field nhạy cảm đã được loại bỏ ngay từ tầng model:
+//   - getDetailsWithMembers: project bỏ password/verifyToken và KHÔNG đẩy inviteToken ra ngoài.
+//   - getDetails (board): project bỏ password/verifyToken của owners/members.
+// Ở đây chỉ pick lại đúng các field cần thiết để payload gọn và không rò rỉ thêm gì.
+const exportData = async (workspaceId) => {
+  try {
+    const workspace = await workspaceModel.getDetailsWithMembers(workspaceId)
+    if (!workspace) {
+      throw new ApiError(StatusCodes.NOT_FOUND, 'Workspace not found!')
+    }
+
+    // Lấy các board còn sống (findByWorkspaceId đã lọc _destroy: false),
+    // sau đó dùng aggregate getDetails có sẵn để kèm columns/cards/labels — tránh N+1 query thủ công.
+    const boards = await boardModel.findByWorkspaceId(workspaceId)
+    const boardDetails = await Promise.all(
+      boards.map((board) => boardModel.getDetails(null, board._id.toString()))
+    )
+
+    const exportedBoards = boardDetails
+      .filter(Boolean) // phòng thủ: bỏ qua board vừa bị xoá giữa 2 query
+      .map((board) => ({
+        _id: board._id,
+        title: board.title,
+        description: board.description,
+        type: board.type,
+        columnOrderIds: board.columnOrderIds,
+        columns: board.columns,
+        cards: board.cards,
+        labels: board.labels,
+        customFields: board.customFields // giữ để card.customFieldValues còn tham chiếu hợp lệ
+      }))
+
+    return {
+      schemaVersion: 1,
+      kind: 'workspace',
+      exportedAt: new Date().toISOString(),
+      workspace: {
+        _id: workspace._id,
+        title: workspace.title,
+        description: workspace.description,
+        visibility: workspace.visibility,
+        createdAt: workspace.createdAt,
+        // members đã sạch từ getDetailsWithMembers; chỉ giữ lại field public, bỏ notificationPrefs (dữ liệu cá nhân)
+        members: (workspace.members || []).map((m) => ({
+          userId: m.userId,
+          email: m.email,
+          displayName: m.displayName,
+          role: m.role,
+          status: m.status,
+          joinedAt: m.joinedAt
+        }))
+      },
+      boards: exportedBoards
+    }
+  } catch (error) {
+    throw error
+  }
+}
+
+// Import: tạo MỘT workspace mới từ file JSON đã export.
+// Nguyên tắc nghiệp vụ:
+//   - Người bấm import trở thành OWNER duy nhất (không tái tạo được tài khoản người khác).
+//   - Sinh ObjectId MỚI cho mọi entity rồi remap toàn bộ tham chiếu chéo, giữ đúng thứ tự cột/thẻ.
+//   - KHÔNG mang theo: thành viên khác, assignee (memberIds), attachments, comments → reset rỗng/0.
+//   - Ghi atomic qua transaction ở tầng model (all-or-nothing).
+// reqBody đã được validation strip sạch, chỉ còn field trong whitelist.
+const importData = async (userId, email, reqBody) => {
+  try {
+    const now = Date.now()
+    const ownerObjectId = new ObjectId(userId)
+    const workspaceId = new ObjectId()
+
+    const workspaceDoc = {
+      _id: workspaceId,
+      title: reqBody.workspace.title,
+      description: reqBody.workspace.description || '',
+      logo: null,
+      visibility: reqBody.workspace.visibility || 'private',
+      invitePermission: 'admin',
+      boardCreation: 'all',
+      boardDeletion: 'admin',
+      members: [{
+        userId: ownerObjectId,
+        email,
+        role: WORKSPACE_ROLES.OWNER,
+        status: 'active',
+        inviteToken: null,
+        joinedAt: now
+      }],
+      createdAt: now,
+      updatedAt: null,
+      _destroy: false
+    }
+
+    // Dựng document cho từng board bằng helper dùng chung (remap ID + reset field nhạy cảm).
+    const boardDocs = []
+    const columnDocs = []
+    const cardDocs = []
+    const labelDocs = []
+
+    for (const board of (reqBody.boards || [])) {
+      const built = buildBoardDocs(board, { ownerObjectId, workspaceId, now })
+      boardDocs.push(built.boardDoc)
+      columnDocs.push(...built.columnDocs)
+      cardDocs.push(...built.cardDocs)
+      labelDocs.push(...built.labelDocs)
+    }
+
+    const newWorkspaceId = await workspaceModel.importWorkspace({ workspaceDoc, boardDocs, columnDocs, cardDocs, labelDocs })
+
+    return {
+      workspaceId: newWorkspaceId,
+      counts: {
+        boards: boardDocs.length,
+        columns: columnDocs.length,
+        cards: cardDocs.length,
+        labels: labelDocs.length
+      }
+    }
   } catch (error) {
     throw error
   }
@@ -612,6 +738,8 @@ export const workspaceService = {
   getWorkspacesByUserId,
   getDetails,
   deleteItem,
+  exportData,
+  importData,
   update,
   inviteMember,
   acceptInvite,

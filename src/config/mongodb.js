@@ -41,3 +41,10 @@ export const GET_DB = () => {
   return whipDatabaseInstance
 }
 
+// Trả về MongoClient để mở session/transaction (dùng cho các thao tác đa-document cần all-or-nothing,
+// ví dụ import workspace). Phải gọi sau khi đã CONNECT_DB thành công.
+export const GET_CLIENT = () => {
+  if (!whipDatabaseInstance) throw new Error('must connect to db first')
+  return client
+}
+

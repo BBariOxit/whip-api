@@ -1,6 +1,6 @@
 import Joi from 'joi'
 import { OBJECT_ID_RULE, OBJECT_ID_RULE_MESSAGE } from '~/utils/validators'
-import { GET_DB } from '~/config/mongodb'
+import { GET_DB, GET_CLIENT } from '~/config/mongodb'
 import { ObjectId } from 'mongodb'
 import { BOARD_TYPES } from '~/utils/constants'
 import { columnModel } from './columnModel'
@@ -561,10 +561,30 @@ const getStarredBoards = async (userId) => {
   }
 }
 
+// Import 1 board lẻ: ghi board + columns + cards + labels trong MỘT transaction (all-or-nothing).
+// Nếu bất kỳ bước nào lỗi → rollback, không để lại board/column mồ côi.
+const importBoard = async ({ boardDoc, columnDocs, cardDocs, labelDocs }) => {
+  const session = GET_CLIENT().startSession()
+  try {
+    await session.withTransaction(async () => {
+      const db = GET_DB()
+      await db.collection(BOARD_COLLECTION_NAME).insertOne(boardDoc, { session })
+      // insertMany ném lỗi nếu mảng rỗng → chỉ ghi khi có dữ liệu.
+      if (columnDocs.length) await db.collection('columns').insertMany(columnDocs, { session })
+      if (cardDocs.length) await db.collection('cards').insertMany(cardDocs, { session })
+      if (labelDocs.length) await db.collection('labels').insertMany(labelDocs, { session })
+    })
+    return boardDoc._id
+  } finally {
+    await session.endSession()
+  }
+}
+
 export const boardModel = {
   BOARD_COLLECTION_NAME,
   BOARD_COLLECTION_SCHEMA,
   createNew,
+  importBoard,
   findOneById,
   getDetails,
   pushColumnOrderIds,
