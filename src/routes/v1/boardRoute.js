@@ -34,6 +34,11 @@ Router.route('/starred')
 Router.route('/:id/export')
   .get(authMiddleware.isAuthorized, requireBoardRole(['admin', 'member']), boardController.exportBoard)
 
+// Nhân bản board → bản sao mới cùng ngữ cảnh, người gọi làm owner.
+// Chỉ cần đăng nhập; quyền xem board + quyền tạo board trong workspace được service kiểm tra.
+Router.route('/:id/duplicate')
+  .post(authMiddleware.isAuthorized, boardController.duplicateBoard)
+
 Router.route('/:id/archived-items')
   .get(authMiddleware.isAuthorized, requireBoardRole(['admin', 'member']), boardController.getArchivedItems)
 

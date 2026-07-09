@@ -87,6 +87,36 @@ const importBoard = async (req, res, next) => {
   }
 }
 
+const duplicateBoard = async (req, res, next) => {
+  try {
+    const userId = req.jwtDecoded._id
+    const boardId = req.params.id
+    const newBoard = await boardService.duplicateBoard(userId, boardId)
+    res.status(StatusCodes.CREATED).json(newBoard)
+
+    // Bản sao trong workspace cũng là board mới → thông báo + ghi activity (best-effort, không chặn response)
+    if (newBoard?.workspaceId) {
+      notificationService.notifyWorkspaceBoardChange({
+        io: req.app.get('socketio'),
+        type: NOTIFICATION_TYPES.BOARD_CREATED,
+        workspaceId: newBoard.workspaceId.toString(),
+        boardTitle: newBoard.title,
+        boardId: newBoard._id.toString(),
+        actorId: userId
+      })
+      workspaceActivityService.log({
+        workspaceId: newBoard.workspaceId.toString(),
+        actorId: userId,
+        actionType: WORKSPACE_ACTIVITY_TYPES.BOARD_CREATED,
+        targetName: newBoard.title,
+        metadata: { boardId: newBoard._id.toString() }
+      })
+    }
+  } catch (error) {
+    next(error)
+  }
+}
+
 const update = async (req, res, next) => {
   try {
     const boardId = req.params.id
@@ -284,6 +314,7 @@ export const boardController = {
   createNew,
   exportBoard,
   importBoard,
+  duplicateBoard,
   getDetails,
   update,
   updateVisibility,
