@@ -60,12 +60,19 @@ import { cardModel } from '~/models/cardModel'
 import { labelModel } from '~/models/labelModel'
 import { commentModel } from '~/models/commentModel'
 import { BOARD_TYPES, WORKSPACE_ROLES } from '~/utils/constants'
+import { OBJECT_ID_RULE } from '~/utils/validators'
 
 /**
  * Hàm Helper: Xác định Role của User đối với một Board cụ thể.
  * Trả về một trong các string: 'admin', 'member', 'viewer', 'none'
  */
 export const getBoardAccessRole = async (board, userId) => {
+  // Guest chỉ có quyền đọc board public. Guard này cũng tránh gọi
+  // userId.toString() khi optionalAuth không có token.
+  if (!userId) {
+    return board.type === BOARD_TYPES.PUBLIC ? 'viewer' : 'none'
+  }
+
   // 1. Kiểm tra trực tiếp trên Board (người tạo hoặc thành viên đích danh)
   const isOwner = board.ownerIds?.some(id => id.toString() === userId.toString())
   if (isOwner) return 'admin'
@@ -76,7 +83,9 @@ export const getBoardAccessRole = async (board, userId) => {
   if (board.workspaceId) {
     const workspace = await workspaceModel.findById(board.workspaceId.toString())
     if (workspace) {
-      const memberInfo = workspace.members?.find(m => m.userId.toString() === userId.toString())
+      const memberInfo = workspace.members?.find(
+        (member) => member.status === 'active' && member.userId?.toString() === userId.toString()
+      )
       if (memberInfo) {
         if (memberInfo.role === WORKSPACE_ROLES.OWNER || memberInfo.role === WORKSPACE_ROLES.ADMIN) {
           return 'admin' // Admin của Workspace -> Admin của Board
@@ -161,6 +170,10 @@ export const requireBoardRole = (allowedRoles = []) => {
         throw new ApiError(StatusCodes.BAD_REQUEST, 'Board ID could not be determined for access check.')
       }
 
+      if (!OBJECT_ID_RULE.test(boardId.toString())) {
+        throw new ApiError(StatusCodes.BAD_REQUEST, 'Invalid board ID.')
+      }
+
       board = await boardModel.findOneById(boardId)
       if (!board) {
         throw new ApiError(StatusCodes.NOT_FOUND, 'Board not found!')
@@ -177,8 +190,11 @@ export const requireBoardRole = (allowedRoles = []) => {
 
       // Kiểm tra xem role hiện tại có nằm trong danh sách cho phép không
       if (!allowedRoles.includes(userRole)) {
+        const statusCode = !userId && userRole === 'none'
+          ? StatusCodes.UNAUTHORIZED
+          : StatusCodes.FORBIDDEN
         throw new ApiError(
-          StatusCodes.FORBIDDEN, 
+          statusCode,
           `Access denied. You need one of these roles: [${allowedRoles.join(', ')}] but you are '${userRole}'.`
         )
       }

@@ -11,6 +11,7 @@ import { customFieldRouter } from './customFieldRoute'
 import { commentRouter } from './commentRoute'
 import { workspaceRoute } from './workspaceRoute'
 import { notificationRoute } from './notificationRoute'
+import { shareRouter } from './shareRoute'
 
 const Router = express.Router()
 //check APIs v1/status
@@ -44,5 +45,9 @@ Router.use('/workspaces', workspaceRoute)
 
 // Notification APIs
 Router.use('/notifications', notificationRoute)
+
+// Public/read-only share APIs. Access is still enforced from board visibility
+// and membership by optionalAuth + board RBAC.
+Router.use('/shares', shareRouter)
 
 export const APIs_V1 = Router
