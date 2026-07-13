@@ -172,7 +172,7 @@ const duplicateBoard = async (userId, boardId) => {
   }
 }
 
-const getDetails = async (userId, boardId) => {
+const getDetails = async (userId, boardId, precomputedAccessRole = null) => {
   try {
     if (!OBJECT_ID_RULE.test(boardId)) {
       throw new ApiError(StatusCodes.BAD_REQUEST, 'Invalid board id')
@@ -182,13 +182,17 @@ const getDetails = async (userId, boardId) => {
       throw new ApiError(StatusCodes.NOT_FOUND, 'board not found!')
     }
 
-    // 👑 CHỐT CHẶN BẢO MẬT (Gatekeeper)
-    const isOwner = userId && board.ownerIds?.some(id => id.toString() === userId)
-    const isMember = userId && board.memberIds?.some(id => id.toString() === userId)
-    const isAuthorized = isOwner || isMember
-
-    if (board.type === 'private' && !isAuthorized) {
-      throw new ApiError(StatusCodes.FORBIDDEN, 'Access denied. You do not have permission to view this private board.')
+    // Defense in depth: middleware là chốt đầu tiên, service kiểm tra lại để
+    // caller mới không thể vô tình bỏ qua quyền kế thừa từ workspace.
+    const accessRole = precomputedAccessRole || await getBoardAccessRole(board, userId)
+    if (accessRole === 'none') {
+      const statusCode = userId ? StatusCodes.FORBIDDEN : StatusCodes.UNAUTHORIZED
+      throw new ApiError(
+        statusCode,
+        userId
+          ? 'Access denied. You do not have permission to view this board.'
+          : 'Authentication is required to view this board.'
+      )
     }
 
     // // B1: structuredClone board ra một cái mới để xử lý, không ảnh hưởng tới board ban đầu,

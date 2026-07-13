@@ -4,6 +4,7 @@ import { cardService } from '~/services/cardService'
 import { columnService } from '~/services/columnService'
 import { notificationService } from '~/services/notificationService'
 import { workspaceActivityService } from '~/services/workspaceActivityService'
+import { shareService } from '~/services/shareService'
 import { NOTIFICATION_TYPES, WORKSPACE_ACTIVITY_TYPES } from '~/utils/constants'
 
 
@@ -52,7 +53,9 @@ const getDetails = async (req, res, next) => {
     const boardId = req.params.id
 
     // điều hướng dữ liệu qua tầng service
-    const board = await boardService.getDetails(userId, boardId)
+    const board = req.boardAccessRole === 'viewer'
+      ? await shareService.getShareBoard(userId, boardId, req.boardAccessRole)
+      : await boardService.getDetails(userId, boardId, req.boardAccessRole)
     if (board) {
       board.userAccessRole = req.boardAccessRole || 'viewer'
     }

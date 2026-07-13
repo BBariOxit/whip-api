@@ -9,7 +9,7 @@
   },
   "scripts": {
     "lint": "eslint src --ext js --report-unused-disable-directives --max-warnings 0",
-    "clean": "rm -rf build && mkdir build",
+    "clean": "node -e \"const fs=require('fs');fs.rmSync('build',{recursive:true,force:true});fs.mkdirSync('build',{recursive:true})\"",
     "build-babel": "babel ./src -d ./build/src",
     "build": "npm run clean && npm run build-babel",
     "production": "cross-env BUILD_MODE=production node ./build/src/server.js",
