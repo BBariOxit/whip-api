@@ -26,6 +26,11 @@ const USER_COLLECTION_SCHEMA = Joi.object({
   // Phân biệt loại đăng nhập: email/password, google, github
   loginType: Joi.string().valid('email', 'google', 'github').default('email'),
 
+  // Tăng mỗi khi mật khẩu thay đổi/reset để vô hiệu hóa toàn bộ JWT đã cấp trước đó.
+  tokenVersion: Joi.number().integer().min(0).default(0),
+  passwordResetTokenHash: Joi.string().allow(null).default(null),
+  passwordResetExpiresAt: Joi.date().timestamp('javascript').allow(null).default(null),
+
   createdAt: Joi.date().timestamp('javascript').default(Date.now),
   updatedAt: Joi.date().timestamp('javascript').default(null),
   _destroy: Joi.boolean().default(false)
@@ -64,6 +69,16 @@ const findOneByEmail = async (emailValue) => {
   } catch (error) { throw new Error(error) }
 }
 
+const findOneByPasswordResetToken = async (tokenHash) => {
+  try {
+    return await GET_DB().collection(USER_COLLECTION_NAME).findOne({
+      passwordResetTokenHash: tokenHash,
+      passwordResetExpiresAt: { $gt: Date.now() },
+      isActive: true
+    })
+  } catch (error) { throw new Error(error) }
+}
+
 // Lấy nhiều user theo danh sách id (dùng để đối chiếu @mention với handle của member)
 const findManyByIds = async (userIds) => {
   try {
@@ -93,6 +108,62 @@ const update = async (userId, updateData) => {
   } catch (error) { throw new Error(error) }
 }
 
+const savePasswordResetToken = async (userId, tokenHash, expiresAt) => {
+  try {
+    return await GET_DB().collection(USER_COLLECTION_NAME).findOneAndUpdate(
+      { _id: new ObjectId(userId), isActive: true },
+      {
+        $set: {
+          passwordResetTokenHash: tokenHash,
+          passwordResetExpiresAt: expiresAt,
+          updatedAt: Date.now()
+        }
+      },
+      { returnDocument: 'after' }
+    )
+  } catch (error) { throw new Error(error) }
+}
+
+const updatePassword = async (userId, passwordHash) => {
+  try {
+    return await GET_DB().collection(USER_COLLECTION_NAME).findOneAndUpdate(
+      { _id: new ObjectId(userId), isActive: true },
+      {
+        $set: {
+          password: passwordHash,
+          passwordResetTokenHash: null,
+          passwordResetExpiresAt: null,
+          updatedAt: Date.now()
+        },
+        $inc: { tokenVersion: 1 }
+      },
+      { returnDocument: 'after' }
+    )
+  } catch (error) { throw new Error(error) }
+}
+
+const resetPassword = async (tokenHash, passwordHash) => {
+  try {
+    return await GET_DB().collection(USER_COLLECTION_NAME).findOneAndUpdate(
+      {
+        passwordResetTokenHash: tokenHash,
+        passwordResetExpiresAt: { $gt: Date.now() },
+        isActive: true
+      },
+      {
+        $set: {
+          password: passwordHash,
+          passwordResetTokenHash: null,
+          passwordResetExpiresAt: null,
+          updatedAt: Date.now()
+        },
+        $inc: { tokenVersion: 1 }
+      },
+      { returnDocument: 'after' }
+    )
+  } catch (error) { throw new Error(error) }
+}
+
 export const userModel = {
   USER_COLLECTION_NAME,
   USER_COLLECTION_SCHEMA,
@@ -100,6 +171,10 @@ export const userModel = {
   createNew,
   findOneById,
   findOneByEmail,
+  findOneByPasswordResetToken,
   findManyByIds,
-  update
+  update,
+  savePasswordResetToken,
+  updatePassword,
+  resetPassword
 }

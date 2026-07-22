@@ -1,5 +1,6 @@
 import { jwtProvider } from '~/providers/JwtProvider'
 import { env } from '~/config/environment'
+import { authToken } from '~/utils/authToken'
 
 // Parse chuỗi cookie thô từ handshake header thành object { key: value }
 const parseCookie = (cookieHeader) => {
@@ -23,7 +24,8 @@ export const socketAuthMiddleware = async (socket, next) => {
     const token = cookies.accessToken
     if (token) {
       const decoded = await jwtProvider.verifyToken(token, env.ACCESS_TOKEN_SECRET_SIGNATURE)
-      socket.userId = decoded._id
+      const authenticatedUser = await authToken.resolveUser(decoded)
+      socket.userId = authenticatedUser?._id
     }
   } catch (error) {
     // Token hết hạn/sai chữ ký -> bỏ qua, socket.userId để trống

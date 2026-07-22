@@ -6,20 +6,18 @@ import ApiError from '~/utils/ApiError'
 // Cấu hình CORS Option
 export const corsOptions = {
   origin: function (origin, callback) {
-    // nếu môi trường là local dev thì cho qua luôn
-    if (!origin || env.BUILD_MODE === 'dev') {
+    // Requests without an Origin header are server-to-server or same-origin.
+    if (!origin) {
       return callback(null, true)
     }
-    // với production
-    // env.BUILD_MODE === 'production'
+    // Only explicitly configured frontend origins may send credentialed requests.
+    const configuredOrigins = [
+      env.WEBSITE_DOMAIN_DEVELOPMENT,
+      env.WEBSITE_DOMAIN_PRODUCTION,
+      ...WHITELIST_DOMAINS
+    ].filter(Boolean)
 
-    // Kiểm tra xem origin có phải là domain được chấp nhận hay không
-    if (WHITELIST_DOMAINS.includes(origin)) {
-      return callback(null, true)
-    }
-
-    // Cứ thằng nào có đuôi .vercel.app là cho qua hết
-    if (origin && /\.vercel\.app$/.test(origin)) {
+    if (configuredOrigins.includes(origin)) {
       return callback(null, true)
     }
 

@@ -1,37 +1,68 @@
-import { userModel } from "~/models/userModel"
-import { StatusCodes } from "http-status-codes"
-import ApiError from "~/utils/ApiError"
+import crypto from 'crypto'
+import { userModel } from '~/models/userModel'
+import { StatusCodes } from 'http-status-codes'
+import ApiError from '~/utils/ApiError'
 import bcryptjs from 'bcryptjs'
 import { v4 as uuidv4 } from 'uuid'
-import { pickUser } from "~/utils/formatter"
-import { brevoProvider } from "~/providers/brevoProvider"
-import { env } from "~/config/environment"
-import { jwtProvider } from "~/providers/JwtProvider"
-import { cloudinaryProvider } from "~/providers/CloudinaryProvider"
+import { pickUser } from '~/utils/formatter'
+import { brevoProvider } from '~/providers/brevoProvider'
+import { env } from '~/config/environment'
+import { jwtProvider } from '~/providers/JwtProvider'
+import { cloudinaryProvider } from '~/providers/CloudinaryProvider'
+
+const PASSWORD_RESET_TOKEN_TTL_MS = 15 * 60 * 1000
+const PASSWORD_RESET_RESPONSE = {
+  message: 'If an active account exists for that email, a password reset link has been sent.'
+}
+
+const buildTokenPayload = (user) => ({
+  _id: user._id,
+  email: user.email,
+  avatar: user.avatar,
+  displayName: user.displayName,
+  tokenVersion: user.tokenVersion || 0
+})
+
+const getWebsiteOrigin = () => (
+  env.BUILD_MODE === 'dev' ? env.WEBSITE_DOMAIN_DEVELOPMENT : env.WEBSITE_DOMAIN_PRODUCTION
+)
+
+const isAllowedGitHubRedirectUri = (redirectUri) => {
+  try {
+    const candidate = new URL(redirectUri)
+    const allowedOrigins = [env.WEBSITE_DOMAIN_DEVELOPMENT, env.WEBSITE_DOMAIN_PRODUCTION]
+      .filter(Boolean)
+      .map(value => new URL(value).origin)
+
+    return allowedOrigins.includes(candidate.origin) && candidate.pathname === '/login' && !candidate.search && !candidate.hash
+  } catch {
+    return false
+  }
+}
 
 const createNew = async (reqBody) => {
   try {
     // Kiểm tra email đã tồn tại hay chưa
-    const existUser = await userModel.findOneByEmail(reqBody.email) 
-    if(existUser){
-        throw new ApiError(StatusCodes.CONFLICT, 'Email already exists')
-    }  
+    const existUser = await userModel.findOneByEmail(reqBody.email)
+    if (existUser) {
+      throw new ApiError(StatusCodes.CONFLICT, 'Email already exists')
+    }
 
     // tạo data để lưu vào db
     // phần trước dấu @ là tên của người dùng. vd: phanbao@gmail.com -> nameFromEmail = phanbao
-    const nameFromEmail = reqBody.email.split('@')[0] 
-    
+    const nameFromEmail = reqBody.email.split('@')[0]
+
     // Gắn avatar mặc định từ ui-avatars.com
     const defaultAvatar = `https://ui-avatars.com/api/?name=${encodeURIComponent(nameFromEmail)}&background=random&color=fff`
 
     const newUser = {
       email: reqBody.email,
-      password: bcryptjs.hashSync(reqBody.password, 8), // mã hóa password
+      password: await bcryptjs.hash(reqBody.password, 12), // mã hóa password
       username: nameFromEmail,
       // sẽ hiện thị ra tên người dùng (ví dụ: khi đăng ký tài khoản phanbao@gmail.com thì hiển thị username là phanbao và displayName là phanbao)
-      displayName: nameFromEmail, 
+      displayName: nameFromEmail,
       avatar: defaultAvatar, // Thêm avatar
-      verifyToken: uuidv4(), // tạo mã token xác thực
+      verifyToken: uuidv4() // tạo mã token xác thực
     }
 
     // thực hiện lưu thông tin user vào db
@@ -47,7 +78,7 @@ const createNew = async (reqBody) => {
       <h3>Welcome to Whip App!</h3>
       <p>Please click the link below to verify your account:</p>
       <a href="${verificationLink}">Verify Account</a>`
-    
+
     // gửi email cho người dùng xác thực tài khoản
     await brevoProvider.sendEmail(
       getNewUser.email,
@@ -58,13 +89,13 @@ const createNew = async (reqBody) => {
     // return trả về dữ liệu cho phía controller
     return pickUser(getNewUser)
   } catch (error) {
-      throw error
+    throw error
   }
 }
 
 const verifyAccount = async (reqBody) => {
-  try { 
-    // Query user trong Database  
+  try {
+    // Query user trong Database
     const existUser = await userModel.findOneByEmail(reqBody.email)
 
     // Các bước kiểm tra cần thiết
@@ -83,30 +114,27 @@ const verifyAccount = async (reqBody) => {
     const updatedUser = await userModel.update(existUser._id, updateData)
     // return dữ liệu cho phía controller
     return pickUser(updatedUser)
-    
+
   } catch (error) {throw error}
 }
 
 const login = async (reqBody) => {
-  try { 
+  try {
     // Query user trong Database
     const existUser = await userModel.findOneByEmail(reqBody.email)
 
     // Các bước kiểm tra cần thiết
-    if (!existUser) throw new ApiError(StatusCodes.NOT_FOUND, 'Account not found!!')
-    if (!existUser.isActive) throw new ApiError(StatusCodes.NOT_ACCEPTABLE, 'your account is not activated')
-    if (!bcryptjs.compareSync(reqBody.password, existUser.password)){
-      throw new ApiError(StatusCodes.NOT_ACCEPTABLE, 'your email or password is incorrect')
-    } 
+    if (!existUser || !existUser.password) {
+      throw new ApiError(StatusCodes.UNAUTHORIZED, 'Your email or password is incorrect')
+    }
+    if (!existUser.isActive) throw new ApiError(StatusCodes.NOT_ACCEPTABLE, 'Your account is not activated')
+    if (!(await bcryptjs.compare(reqBody.password, existUser.password))) {
+      throw new ApiError(StatusCodes.UNAUTHORIZED, 'Your email or password is incorrect')
+    }
 
     // Nếu mọi thứ ok thì bắt đầu tạo Tokens đăng nhập để trả về cho phía FE
     // tạo thông tin sẽ đính kèm trong JWT Token bao gồm _id và email của user
-    const userInfo = {
-      _id: existUser._id,
-      email: existUser.email,
-      avatar: existUser.avatar,
-      displayName: existUser.displayName
-    }
+    const userInfo = buildTokenPayload(existUser)
 
     // Tạo ra 2 loại token, accessToken và refreshToken để trả về cho phía FE
     const accessToken = await jwtProvider.generateToken(
@@ -121,7 +149,7 @@ const login = async (reqBody) => {
       env.REFRESH_TOKEN_LIFE
       // 15 // 15 giây để test refreshToken hết hạn
     )
-    
+
     // Trả về thông tin của user kèm theo 2 cái token vừa tạo ra
     return { accessToken, refreshToken, ...pickUser(existUser) }
   } catch (error) {throw error}
@@ -132,13 +160,11 @@ const refreshToken = async (clientRefreshToken) => {
     // Verify / giải mã cái refresh token xem có hợp lệ không
     const refreshTokenDecoded = await jwtProvider.verifyToken(clientRefreshToken, env.REFRESH_TOKEN_SECRET_SIGNATURE)
 
-    // Đoạn này vì chúng ta chỉ lưu những thông tin unique và cố định của user trong token rồi, vì vậy có thể lấy luôn từ decoded ra, tiết kiệm query vào DB để lấy data mới.
-    const userInfo = {
-      _id: refreshTokenDecoded._id,
-      email: refreshTokenDecoded.email,
-      avatar: refreshTokenDecoded.avatar,
-      displayName: refreshTokenDecoded.displayName
+    const user = await userModel.findOneById(refreshTokenDecoded._id)
+    if (!user || !user.isActive || (user.tokenVersion || 0) !== (refreshTokenDecoded.tokenVersion || 0)) {
+      throw new ApiError(StatusCodes.FORBIDDEN, 'Session is no longer valid')
     }
+    const userInfo = buildTokenPayload(user)
 
     // Tạo accessToken mới
     const accessToken = await jwtProvider.generateToken(
@@ -153,52 +179,100 @@ const refreshToken = async (clientRefreshToken) => {
 }
 
 const update = async (userId, reqBody, userAvatarFile) => {
-  try { 
+  try {
     // Query user trong Database
     const existUser = await userModel.findOneById(userId)
     // Các bước kiểm tra cần thiết
     if (!existUser) throw new ApiError(StatusCodes.NOT_FOUND, 'Account not found!')
     if (!existUser.isActive) throw new ApiError(StatusCodes.NOT_ACCEPTABLE, 'Your account is not active!')
-    // khởi tạo kq update user ban đầu là empty
     let updatedUser = {}
-    
-    // Trường hợp change password
-    if (reqBody.current_password && reqBody.new_password) {
-      // ktra xem current_password có đúng không
-      if (!bcryptjs.compareSync(reqBody.current_password, existUser.password)) {
-        throw new ApiError(StatusCodes.NOT_ACCEPTABLE, 'Your current password is incorrect')
-      }
-      // Nếu đúng thì bắt đầu update
-      updatedUser = await userModel.update(userId, {
-        password: bcryptjs.hashSync(reqBody.new_password, 8)
-      })
-    } else if (userAvatarFile) {
+
+    if (userAvatarFile) {
       // trường hợp upload file lên cloudinary
       const uploadResult = await cloudinaryProvider.streamUpload(userAvatarFile.buffer, 'users')
-      console.log('uploadResult: ', uploadResult)
       // lưu lại secure_url của cái file ảnh vào trong db
       updatedUser = await userModel.update(userId, {
         avatar: uploadResult.secure_url
       })
     } else {
       // trường hợp update các thông tin chung, vd displayname
-      updatedUser = await userModel.update(userId, reqBody)
+      if (!reqBody.displayName) {
+        throw new ApiError(StatusCodes.BAD_REQUEST, 'No profile information to update')
+      }
+      updatedUser = await userModel.update(userId, {
+        displayName: reqBody.displayName
+      })
     }
     // return dữ liệu cho phía controller
-    return pickUser(updatedUser) 
+    return pickUser(updatedUser)
   } catch (error) { throw error }
+}
+
+const changePassword = async (userId, reqBody) => {
+  const user = await userModel.findOneById(userId)
+  if (!user || !user.isActive) throw new ApiError(StatusCodes.NOT_FOUND, 'Account not found')
+  if (!user.password) {
+    throw new ApiError(StatusCodes.CONFLICT, 'Password login is not enabled for this account')
+  }
+
+  const currentPasswordMatches = await bcryptjs.compare(reqBody.current_password, user.password)
+  if (!currentPasswordMatches) {
+    throw new ApiError(StatusCodes.UNAUTHORIZED, 'Your current password is incorrect')
+  }
+
+  const reusesCurrentPassword = await bcryptjs.compare(reqBody.new_password, user.password)
+  if (reusesCurrentPassword) {
+    throw new ApiError(StatusCodes.UNPROCESSABLE_ENTITY, 'New password must be different from the current password')
+  }
+
+  const passwordHash = await bcryptjs.hash(reqBody.new_password, 12)
+  const updatedUser = await userModel.updatePassword(userId, passwordHash)
+  if (!updatedUser) throw new ApiError(StatusCodes.NOT_FOUND, 'Account not found')
+
+  return { userId: updatedUser._id.toString(), passwordChanged: true }
+}
+
+const requestPasswordReset = async ({ email }) => {
+  const user = await userModel.findOneByEmail(email)
+  if (!user?.isActive) return PASSWORD_RESET_RESPONSE
+
+  const token = crypto.randomBytes(32).toString('hex')
+  const tokenHash = crypto.createHash('sha256').update(token).digest('hex')
+  await userModel.savePasswordResetToken(user._id, tokenHash, Date.now() + PASSWORD_RESET_TOKEN_TTL_MS)
+
+  const resetLink = `${getWebsiteOrigin()}/reset-password?token=${token}`
+  const subject = 'Reset your Whip password'
+  const htmlContent = `
+    <h3>Reset your Whip password</h3>
+    <p>This link expires in 15 minutes and can only be used once.</p>
+    <a href="${resetLink}">Reset password</a>
+    <p>If you did not request this, you can safely ignore this email.</p>`
+
+  await brevoProvider.sendEmail(user.email, subject, htmlContent)
+  return PASSWORD_RESET_RESPONSE
+}
+
+const resetPassword = async ({ token, new_password }) => {
+  const tokenHash = crypto.createHash('sha256').update(token).digest('hex')
+  const user = await userModel.findOneByPasswordResetToken(tokenHash)
+  if (!user) throw new ApiError(StatusCodes.BAD_REQUEST, 'Password reset link is invalid or expired')
+
+  if (user.password && await bcryptjs.compare(new_password, user.password)) {
+    throw new ApiError(StatusCodes.UNPROCESSABLE_ENTITY, 'New password must be different from the current password')
+  }
+
+  const passwordHash = await bcryptjs.hash(new_password, 12)
+  const updatedUser = await userModel.resetPassword(tokenHash, passwordHash)
+  if (!updatedUser) throw new ApiError(StatusCodes.BAD_REQUEST, 'Password reset link is invalid or expired')
+
+  return { userId: updatedUser._id.toString(), passwordReset: true }
 }
 
 /**
  * Helper function dùng chung: tạo tokens cho OAuth user
  */
 const _generateTokensForOAuthUser = async (user) => {
-  const userInfo = { 
-    _id: user._id, 
-    email: user.email,
-    avatar: user.avatar,
-    displayName: user.displayName
-  }
+  const userInfo = buildTokenPayload(user)
 
   const accessToken = await jwtProvider.generateToken(
     userInfo,
@@ -223,11 +297,17 @@ const googleLogin = async (accessToken) => {
     const userInfoResponse = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
       headers: { 'Authorization': `Bearer ${accessToken}` }
     })
+    if (!userInfoResponse.ok) {
+      throw new ApiError(StatusCodes.UNAUTHORIZED, 'Google authentication failed')
+    }
     const googleUser = await userInfoResponse.json()
 
-    if (!googleUser.email) throw new ApiError(StatusCodes.BAD_REQUEST, 'Cannot get email from Google account')
+    if (!googleUser.email || !googleUser.email_verified) {
+      throw new ApiError(StatusCodes.UNAUTHORIZED, 'A verified Google email is required')
+    }
 
-    const { email, name, picture } = googleUser
+    const { name, picture } = googleUser
+    const email = googleUser.email.toLowerCase()
 
     // Tìm user theo email
     let user = await userModel.findOneByEmail(email)
@@ -259,13 +339,18 @@ const googleLogin = async (accessToken) => {
 /**
  * GitHub Login - Đổi authorization code lấy access_token, rồi lấy user info
  */
-const githubLogin = async (code) => {
+const githubLogin = async ({ code, redirectUri }) => {
   try {
-    // Chọn client ID/Secret phù hợp với môi trường
+    if (!isAllowedGitHubRedirectUri(redirectUri)) {
+      throw new ApiError(StatusCodes.BAD_REQUEST, 'GitHub redirect URI is invalid')
+    }
+
     const clientId = env.BUILD_MODE === 'production' ? env.GITHUB_CLIENT_ID_PRODUCTION : env.GITHUB_CLIENT_ID_LOCAL
     const clientSecret = env.BUILD_MODE === 'production' ? env.GITHUB_CLIENT_SECRET_PRODUCTION : env.GITHUB_CLIENT_SECRET_LOCAL
+    if (!clientId || !clientSecret) {
+      throw new ApiError(StatusCodes.SERVICE_UNAVAILABLE, 'GitHub authentication is not configured')
+    }
 
-    // Bước 1: Đổi authorization code lấy access_token
     const tokenResponse = await fetch('https://github.com/login/oauth/access_token', {
       method: 'POST',
       headers: {
@@ -275,40 +360,41 @@ const githubLogin = async (code) => {
       body: JSON.stringify({
         client_id: clientId,
         client_secret: clientSecret,
-        code: code
+        code,
+        redirect_uri: redirectUri
       })
     })
     const tokenData = await tokenResponse.json()
 
-    if (tokenData.error || !tokenData.access_token) {
-      throw new ApiError(StatusCodes.BAD_REQUEST, tokenData.error_description || 'Failed to get GitHub access token')
+    if (!tokenResponse.ok || tokenData.error || !tokenData.access_token) {
+      throw new ApiError(StatusCodes.UNAUTHORIZED, tokenData.error_description || 'GitHub authentication failed')
     }
 
-    // Bước 2: Lấy user info từ GitHub
     const userResponse = await fetch('https://api.github.com/user', {
       headers: {
         'Authorization': `Bearer ${tokenData.access_token}`,
-        'Accept': 'application/json'
+        'Accept': 'application/vnd.github+json',
+        'X-GitHub-Api-Version': '2022-11-28'
       }
     })
+    if (!userResponse.ok) throw new ApiError(StatusCodes.UNAUTHORIZED, 'Cannot get GitHub account information')
     const githubUser = await userResponse.json()
 
-    // Bước 3: Lấy email (có thể private nên cần gọi thêm API emails)
-    let email = githubUser.email
-    if (!email) {
-      const emailsResponse = await fetch('https://api.github.com/user/emails', {
-        headers: {
-          'Authorization': `Bearer ${tokenData.access_token}`,
-          'Accept': 'application/json'
-        }
-      })
-      const emails = await emailsResponse.json()
-      // Lấy email primary và đã verified
-      const primaryEmail = emails.find(e => e.primary && e.verified)
-      email = primaryEmail ? primaryEmail.email : (emails[0]?.email || null)
+    const emailsResponse = await fetch('https://api.github.com/user/emails', {
+      headers: {
+        'Authorization': `Bearer ${tokenData.access_token}`,
+        'Accept': 'application/vnd.github+json',
+        'X-GitHub-Api-Version': '2022-11-28'
+      }
+    })
+    if (!emailsResponse.ok) throw new ApiError(StatusCodes.UNAUTHORIZED, 'Cannot get verified GitHub email')
+    const emails = await emailsResponse.json()
+    const verifiedEmail = emails.find(item => item.primary && item.verified)
+      || emails.find(item => item.verified)
+    if (!verifiedEmail?.email) {
+      throw new ApiError(StatusCodes.UNAUTHORIZED, 'A verified GitHub email is required')
     }
-
-    if (!email) throw new ApiError(StatusCodes.BAD_REQUEST, 'Cannot get email from GitHub account')
+    const email = verifiedEmail.email.toLowerCase()
 
     // Tìm user theo email
     let user = await userModel.findOneByEmail(email)
@@ -343,6 +429,9 @@ export const userService = {
   login,
   refreshToken,
   update,
+  changePassword,
+  requestPasswordReset,
+  resetPassword,
   googleLogin,
   githubLogin
 }
