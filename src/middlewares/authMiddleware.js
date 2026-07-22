@@ -2,8 +2,9 @@ import { StatusCodes } from 'http-status-codes'
 import { jwtProvider } from '~/providers/JwtProvider'
 import { env } from '~/config/environment'
 import ApiError from '~/utils/ApiError'
+import { authToken } from '~/utils/authToken'
 
-// Middleware này sẽ đảm nhận việc quan trọng: 
+// Middleware này sẽ đảm nhận việc quan trọng:
 // Xác thực cái JWT accessToken nhận được từ phía FE có hợp lệ hay không
 const isAuthorized = async (req, res, next) => {
   // Lấy accessToken nằm trong request cookies phía client - withCredentials trong file authorizeAxios
@@ -14,13 +15,15 @@ const isAuthorized = async (req, res, next) => {
     next(new ApiError(StatusCodes.UNAUTHORIZED, 'Unauthorized! (token not found)'))
     return
   }
-  
+
   try {
     // Bước 01: Thực hiện giải mã token xem nó có hợp lệ hay là không
     const accessTokenDecoded = await jwtProvider.verifyToken(clientAccessToken, env.ACCESS_TOKEN_SECRET_SIGNATURE)
+    const authenticatedUser = await authToken.resolveUser(accessTokenDecoded)
+    if (!authenticatedUser) throw new Error('session revoked')
     // console.log('accessTokenDecoded', accessTokenDecoded)
     // Bước 02: Quan trọng: Nếu như cái token hợp lệ, thì sẽ cần phải lưu thông tin giải mã được vào cái req.jwtDecoded, để sử dụng cho các tầng cần xử lý ở phía sau
-    req.jwtDecoded = accessTokenDecoded
+    req.jwtDecoded = authenticatedUser
 
     // Bước 03: Cho phép cái request đi tiếp
     next()
@@ -52,7 +55,7 @@ const optionalAuth = async (req, res, next) => {
 
   try {
     const accessTokenDecoded = await jwtProvider.verifyToken(clientAccessToken, env.ACCESS_TOKEN_SECRET_SIGNATURE)
-    req.jwtDecoded = accessTokenDecoded
+    req.jwtDecoded = await authToken.resolveUser(accessTokenDecoded)
     next()
   } catch (error) {
     // Nếu có token nhưng lỗi (hết hạn, sai chữ ký, v.v.), vẫn cho qua nhưng với vai trò Guest

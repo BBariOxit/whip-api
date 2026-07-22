@@ -20,6 +20,9 @@ import { workspaceActivityModel } from '~/models/workspaceActivityModel'
 const START_SERVER = () => {
   const app = express()
 
+  // Production runs behind one trusted reverse proxy; req.ip is then safe for rate limiting.
+  if (env.BUILD_MODE === 'production') app.set('trust proxy', 1)
+
   // Fix cái vụ Cache from disk của ExpressJS
   app.use((req, res, next) => {
     res.set('Cache-Control', 'no-store')

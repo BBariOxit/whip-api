@@ -79,7 +79,15 @@ ADMIN_EMAIL_NAME='<sender-display-name>'
 
 # Google OAuth (token verification)
 VITE_GOOGLE_CLIENT_ID='<your-google-oauth-client-id>'
+
+# GitHub OAuth (use separate apps for local and production)
+GITHUB_CLIENT_ID_LOCAL='<your-local-client-id>'
+GITHUB_CLIENT_SECRET_LOCAL='<your-local-client-secret>'
+GITHUB_CLIENT_ID_PRODUCTION='<your-production-client-id>'
+GITHUB_CLIENT_SECRET_PRODUCTION='<your-production-client-secret>'
 ```
+
+Each GitHub OAuth App callback URL must be exactly `<matching-frontend-origin>/login`.
 
 *(See `.env.example` for the full list, including optional GitHub OAuth keys.)*
 
