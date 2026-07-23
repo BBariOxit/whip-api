@@ -608,11 +608,33 @@ const getArchivedItems = async (boardId) => {
 
 const joinBoard = async (userId, boardId) => {
   try {
+    if (!OBJECT_ID_RULE.test(boardId)) {
+      throw new ApiError(StatusCodes.BAD_REQUEST, 'Invalid board id')
+    }
+
     const board = await boardModel.findOneById(boardId)
     if (!board) throw new ApiError(StatusCodes.NOT_FOUND, 'Board not found!')
 
-    if (board.type === 'private') {
+    if (board.type === BOARD_TYPES.PRIVATE) {
       throw new ApiError(StatusCodes.FORBIDDEN, 'Cannot join a private board!')
+    }
+
+    if (board.type === BOARD_TYPES.WORKSPACE_VISIBLE) {
+      if (!board.workspaceId) {
+        throw new ApiError(StatusCodes.FORBIDDEN, 'Workspace-visible boards must belong to a workspace!')
+      }
+
+      const workspace = await workspaceModel.findById(board.workspaceId.toString())
+      const isActiveWorkspaceMember = workspace?.members?.some(member => (
+        member.userId?.toString() === userId.toString() &&
+        member.status === 'active'
+      ))
+      if (!isActiveWorkspaceMember) {
+        throw new ApiError(
+          StatusCodes.FORBIDDEN,
+          'Only active workspace members can join this board!'
+        )
+      }
     }
 
     const isAlreadyJoined = board.memberIds?.some(id => id.toString() === userId.toString())
