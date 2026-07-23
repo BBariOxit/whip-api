@@ -39,7 +39,33 @@ const updateBoardInvitation = async (req, res, next) => {
   }
 }
 
+const boardInvitationId = async (req, res, next) => {
+  const schema = Joi.object({
+    invitationId: Joi.string().required().pattern(OBJECT_ID_RULE).message(OBJECT_ID_RULE_MESSAGE)
+  })
+  try {
+    await schema.validateAsync(req.params, { abortEarly: false })
+    next()
+  } catch (error) {
+    next(new ApiError(StatusCodes.UNPROCESSABLE_ENTITY, new Error(error).message))
+  }
+}
+
+const listBoardInvitations = async (req, res, next) => {
+  const schema = Joi.object({
+    boardId: Joi.string().required().pattern(OBJECT_ID_RULE).message(OBJECT_ID_RULE_MESSAGE)
+  })
+  try {
+    await schema.validateAsync(req.query, { abortEarly: false, allowUnknown: false })
+    next()
+  } catch (error) {
+    next(new ApiError(StatusCodes.UNPROCESSABLE_ENTITY, new Error(error).message))
+  }
+}
+
 export const invitationValidation = {
   createNewBoardInvitation,
-  updateBoardInvitation
+  updateBoardInvitation,
+  boardInvitationId,
+  listBoardInvitations
 }

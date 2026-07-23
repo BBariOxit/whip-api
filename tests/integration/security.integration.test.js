@@ -247,6 +247,13 @@ describe('board invitations', () => {
       .expect(201)
 
     const invitationId = createResponse.body._id
+    expect(new Date(createResponse.body.expiresAt).getTime()).toBeGreaterThan(Date.now())
+
+    await request(app)
+      .post('/v1/invitations/board')
+      .set('Cookie', await authCookie(owner))
+      .send({ boardId: board._id.toString(), inviteeEmail: invitee.email })
+      .expect(409)
 
     await request(app)
       .put(`/v1/invitations/board/${invitationId}`)
@@ -268,6 +275,88 @@ describe('board invitations', () => {
       .set('Cookie', await authCookie(invitee))
       .send({ status: 'REJECTED' })
       .expect(409)
+  })
+
+  it('expires, cancels, lists and resends invitations through valid transitions', async () => {
+    const owner = await createUser('owner-invite-lifecycle@example.com')
+    const invitee = await createUser('invitee-invite-lifecycle@example.com')
+    const outsider = await createUser('outsider-invite-lifecycle@example.com')
+    const board = await createBoard({ owner })
+
+    const created = await request(app)
+      .post('/v1/invitations/board')
+      .set('Cookie', await authCookie(owner))
+      .send({ boardId: board._id.toString(), inviteeEmail: invitee.email })
+      .expect(201)
+
+    await request(app)
+      .delete(`/v1/invitations/board/${created.body._id}`)
+      .set('Cookie', await authCookie(outsider))
+      .expect(403)
+
+    const cancelled = await request(app)
+      .delete(`/v1/invitations/board/${created.body._id}`)
+      .set('Cookie', await authCookie(owner))
+      .expect(200)
+    expect(cancelled.body.boardInvitation.status).toBe('CANCELLED')
+
+    const resent = await request(app)
+      .post(`/v1/invitations/board/${created.body._id}/resend`)
+      .set('Cookie', await authCookie(owner))
+      .expect(200)
+    expect(resent.body.boardInvitation.status).toBe('PENDING')
+    expect(new Date(resent.body.expiresAt).getTime()).toBeGreaterThan(Date.now())
+
+    const listed = await request(app)
+      .get(`/v1/invitations/board?boardId=${board._id}`)
+      .set('Cookie', await authCookie(owner))
+      .expect(200)
+    expect(listed.body).toHaveLength(1)
+    expect(listed.body[0].invitee.email).toBe(invitee.email)
+
+    await db.collection('invitations').updateOne(
+      { _id: new ObjectId(created.body._id) },
+      { $set: { expiresAt: new Date(Date.now() - 1000) } }
+    )
+    await request(app)
+      .put(`/v1/invitations/board/${created.body._id}`)
+      .set('Cookie', await authCookie(invitee))
+      .send({ status: 'ACCEPTED' })
+      .expect(410)
+
+    const expired = await db.collection('invitations').findOne({
+      _id: new ObjectId(created.body._id)
+    })
+    expect(expired.boardInvitation.status).toBe('EXPIRED')
+  })
+
+  it('expires workspace invitation links and removes stale pending members', async () => {
+    const owner = await createUser('owner-workspace-invite-expiry@example.com')
+    const invitee = await createUser('invitee-workspace-invite-expiry@example.com')
+    const token = 'expired-workspace-invitation-token'
+    const workspace = await createWorkspace({
+      owner,
+      members: [{
+        userId: invitee._id,
+        email: invitee.email,
+        role: 'member',
+        status: 'pending',
+        inviteToken: token,
+        inviteExpiresAt: new Date(Date.now() - 1000),
+        joinedAt: Date.now()
+      }]
+    })
+
+    await request(app)
+      .put('/v1/workspaces/accept-invite')
+      .set('Cookie', await authCookie(invitee))
+      .send({ token, workspaceId: workspace._id.toString() })
+      .expect(410)
+
+    const updatedWorkspace = await db.collection('workspaces').findOne({
+      _id: workspace._id
+    })
+    expect(updatedWorkspace.members.map(member => member.email)).not.toContain(invitee.email)
   })
 })
 

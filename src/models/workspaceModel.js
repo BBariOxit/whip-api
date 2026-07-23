@@ -46,6 +46,7 @@ const WORKSPACE_COLLECTION_SCHEMA = Joi.object({
       ).default(WORKSPACE_ROLES.MEMBER),
       status: Joi.string().valid('active', 'pending').default('active'),
       inviteToken: Joi.string().allow(null).default(null),
+      inviteExpiresAt: Joi.date().timestamp('javascript').allow(null).default(null),
       joinedAt: Joi.date().timestamp('javascript').default(Date.now),
       // Tuỳ chọn thông báo cá nhân của thành viên này trong workspace
       notificationPrefs: NOTIFICATION_PREFS_SCHEMA
@@ -189,6 +190,7 @@ const acceptInviteMember = async (workspaceId, inviteToken, userId) => {
           'members.$.userId': new ObjectId(userId),
           'members.$.status': 'active',
           'members.$.inviteToken': null,
+          'members.$.inviteExpiresAt': null,
           updatedAt: Date.now()
         }
       },

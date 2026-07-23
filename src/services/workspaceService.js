@@ -1,10 +1,9 @@
 import { workspaceModel } from '~/models/workspaceModel'
 import { boardModel } from '~/models/boardModel'
 import { userModel } from '~/models/userModel'
-import { invitationModel } from '~/models/invitationModel'
 import { StatusCodes } from 'http-status-codes'
 import ApiError from '~/utils/ApiError'
-import { WORKSPACE_ROLES, INVITATION_TYPES, BOARD_INVITATION_STATUS } from '~/utils/constants'
+import { WORKSPACE_ROLES, INVITATION_TTL_DAYS } from '~/utils/constants'
 import { buildBoardDocs } from '~/utils/importHelpers'
 import { GET_CLIENT, GET_DB } from '~/config/mongodb'
 import { ObjectId } from 'mongodb'
@@ -387,7 +386,12 @@ const inviteMember = async (inviterId, workspaceId, reqBody) => {
         throw new ApiError(StatusCodes.CONFLICT, 'This user is already an active member of this workspace!')
       }
       if (existingMember.status === 'pending') {
-        throw new ApiError(StatusCodes.CONFLICT, 'An invitation has already been sent to this email!')
+        const isExpired = existingMember.inviteExpiresAt &&
+          new Date(existingMember.inviteExpiresAt).getTime() <= Date.now()
+        if (!isExpired) {
+          throw new ApiError(StatusCodes.CONFLICT, 'An invitation has already been sent to this email!')
+        }
+        await workspaceModel.removeMember(workspaceId, inviteeEmail)
       }
     }
 
@@ -409,6 +413,7 @@ const inviteMember = async (inviterId, workspaceId, reqBody) => {
       role: memberRole,
       status: 'pending',
       inviteToken: inviteToken,
+      inviteExpiresAt: new Date(Date.now() + INVITATION_TTL_MS),
       joinedAt: Date.now()
     }
 
@@ -460,6 +465,13 @@ const acceptInvite = async (userId, userEmail, token, workspaceId) => {
     const pendingMember = workspace.members.find(m => m.inviteToken === token)
     if (!pendingMember) {
       throw new ApiError(StatusCodes.NOT_FOUND, 'Invalid or expired invitation token!')
+    }
+    if (
+      pendingMember.inviteExpiresAt &&
+      new Date(pendingMember.inviteExpiresAt).getTime() <= Date.now()
+    ) {
+      await workspaceModel.removeMember(workspaceId, pendingMember.email)
+      throw new ApiError(StatusCodes.GONE, 'This workspace invitation has expired!')
     }
 
     // Đảm bảo đúng người nhận email mới được accept
@@ -781,6 +793,8 @@ const removeMemberAndRevokeBoardAccess = async ({
     await session.endSession()
   }
 }
+
+const INVITATION_TTL_MS = INVITATION_TTL_DAYS * 24 * 60 * 60 * 1000
 
 export const workspaceService = {
   createNew,

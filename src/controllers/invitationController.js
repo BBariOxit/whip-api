@@ -41,8 +41,48 @@ const updateBoardInvitation = async (req, res, next) => {
   } catch (error) { next(error) }
 }
 
+const getBoardInvitations = async (req, res, next) => {
+  try {
+    const result = await invitationService.getBoardInvitations(req.query.boardId)
+    res.status(StatusCodes.OK).json(result)
+  } catch (error) {
+    next(error)
+  }
+}
+
+const cancelBoardInvitation = async (req, res, next) => {
+  try {
+    const result = await invitationService.cancelBoardInvitation(
+      req.jwtDecoded._id,
+      req.params.invitationId
+    )
+    res.status(StatusCodes.OK).json(result)
+  } catch (error) {
+    next(error)
+  }
+}
+
+const resendBoardInvitation = async (req, res, next) => {
+  try {
+    const result = await invitationService.resendBoardInvitation(
+      req.jwtDecoded._id,
+      req.params.invitationId
+    )
+    const io = req.app.get('socketio')
+    if (io && result?.inviteeId) {
+      io.to(`user:${result.inviteeId}`).emit('BE_USER_INVITED_TO_BOARD', result)
+    }
+    res.status(StatusCodes.OK).json(result)
+  } catch (error) {
+    next(error)
+  }
+}
+
 export const invitationController = {
   createNewBoardInvitation,
   getInvitations,
-  updateBoardInvitation
+  updateBoardInvitation,
+  getBoardInvitations,
+  cancelBoardInvitation,
+  resendBoardInvitation
 }

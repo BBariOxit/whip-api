@@ -2,7 +2,7 @@ import Joi from 'joi'
 import { ObjectId } from 'mongodb'
 import { GET_DB } from '~/config/mongodb'
 import { OBJECT_ID_RULE, OBJECT_ID_RULE_MESSAGE } from '~/utils/validators'
-import { INVITATION_TYPES, BOARD_INVITATION_STATUS } from '~/utils/constants'
+import { INVITATION_TYPES, BOARD_INVITATION_STATUS, INVITATION_TTL_DAYS } from '~/utils/constants'
 import { userModel } from './userModel'
 import { boardModel } from './boardModel'
 import { workspaceModel } from './workspaceModel'
@@ -17,7 +17,8 @@ const INVITATION_COLLECTION_SCHEMA = Joi.object({
   // Lời mời là board thì sẽ lưu thêm dữ liệu boardInvitation - optional
   boardInvitation: Joi.object({
     boardId: Joi.string().required().pattern(OBJECT_ID_RULE).message(OBJECT_ID_RULE_MESSAGE),
-    status: Joi.string().required().valid(...Object.values(BOARD_INVITATION_STATUS))
+    status: Joi.string().required().valid(...Object.values(BOARD_INVITATION_STATUS)),
+    respondedAt: Joi.date().timestamp('javascript').allow(null).default(null)
   }).optional(),
 
   // Lời mời vào workspace
@@ -27,6 +28,9 @@ const INVITATION_COLLECTION_SCHEMA = Joi.object({
   }).optional(),
 
   createdAt: Joi.date().timestamp('javascript').default(Date.now),
+  expiresAt: Joi.date().timestamp('javascript').default(
+    () => Date.now() + INVITATION_TTL_DAYS * 24 * 60 * 60 * 1000
+  ),
   updatedAt: Joi.date().timestamp('javascript').default(null),
   _destroy: Joi.boolean().default(false)
 })
@@ -57,7 +61,7 @@ const createNewBoardInvitation = async (data) => {
     const createdInvitation = await GET_DB().collection(INVITATION_COLLECTION_NAME).insertOne(newInvitationToAdd)
     return createdInvitation
   } catch (error) { 
-    throw new Error(error) 
+    throw error
   }
 }
 
@@ -94,6 +98,137 @@ const findOneById = async (invitationId) => {
   } catch (error) { 
     throw new Error(error) 
   }
+}
+
+const expirePendingBoardInvitations = async (filter = {}) => {
+  const now = new Date()
+  return await GET_DB().collection(INVITATION_COLLECTION_NAME).updateMany(
+    {
+      ...filter,
+      type: INVITATION_TYPES.BOARD_INVITATION,
+      'boardInvitation.status': BOARD_INVITATION_STATUS.PENDING,
+      expiresAt: { $lte: now }
+    },
+    {
+      $set: {
+        'boardInvitation.status': BOARD_INVITATION_STATUS.EXPIRED,
+        'boardInvitation.respondedAt': now,
+        updatedAt: now
+      }
+    }
+  )
+}
+
+const findPendingBoardInvitation = async (boardId, inviteeId) => {
+  await expirePendingBoardInvitations({
+    'boardInvitation.boardId': new ObjectId(boardId),
+    inviteeId: new ObjectId(inviteeId)
+  })
+  return await GET_DB().collection(INVITATION_COLLECTION_NAME).findOne({
+    type: INVITATION_TYPES.BOARD_INVITATION,
+    inviteeId: new ObjectId(inviteeId),
+    'boardInvitation.boardId': new ObjectId(boardId),
+    'boardInvitation.status': BOARD_INVITATION_STATUS.PENDING,
+    _destroy: false
+  })
+}
+
+const findByBoard = async (boardId) => {
+  await expirePendingBoardInvitations({
+    'boardInvitation.boardId': new ObjectId(boardId)
+  })
+  return await GET_DB().collection(INVITATION_COLLECTION_NAME).aggregate([
+    {
+      $match: {
+        type: INVITATION_TYPES.BOARD_INVITATION,
+        'boardInvitation.boardId': new ObjectId(boardId),
+        _destroy: false
+      }
+    },
+    {
+      $lookup: {
+        from: userModel.USER_COLLECTION_NAME,
+        localField: 'inviteeId',
+        foreignField: '_id',
+        as: 'invitee',
+        pipeline: [{ $project: { password: 0, verifyToken: 0 } }]
+      }
+    },
+    { $set: { invitee: { $first: '$invitee' } } },
+    { $sort: { createdAt: -1 } }
+  ]).toArray()
+}
+
+const transitionBoardInvitation = async ({
+  invitationId,
+  expectedStatuses,
+  nextStatus,
+  actorFilter = {},
+  expiresAt = null,
+  session = null
+}) => {
+  const now = new Date()
+  const setData = {
+    'boardInvitation.status': nextStatus,
+    'boardInvitation.respondedAt': nextStatus === BOARD_INVITATION_STATUS.PENDING ? null : now,
+    updatedAt: now
+  }
+  if (expiresAt) setData.expiresAt = expiresAt
+
+  return await GET_DB().collection(INVITATION_COLLECTION_NAME).findOneAndUpdate(
+    {
+      _id: new ObjectId(invitationId),
+      ...actorFilter,
+      'boardInvitation.status': { $in: expectedStatuses },
+      _destroy: false
+    },
+    { $set: setData },
+    { returnDocument: 'after', session }
+  )
+}
+
+const initIndexes = async () => {
+  const collection = GET_DB().collection(INVITATION_COLLECTION_NAME)
+  const legacyPending = await collection.find({
+    type: INVITATION_TYPES.BOARD_INVITATION,
+    expiresAt: { $exists: false }
+  }, { projection: { _id: 1, createdAt: 1 } }).toArray()
+
+  if (legacyPending.length) {
+    await collection.bulkWrite(legacyPending.map(invitation => ({
+      updateOne: {
+        filter: { _id: invitation._id },
+        update: {
+          $set: {
+            expiresAt: new Date(
+              new Date(invitation.createdAt).getTime() +
+              INVITATION_TTL_DAYS * 24 * 60 * 60 * 1000
+            )
+          }
+        }
+      }
+    })))
+  }
+  await expirePendingBoardInvitations()
+
+  await collection.createIndex(
+    {
+      type: 1,
+      'boardInvitation.boardId': 1,
+      inviteeId: 1,
+      'boardInvitation.status': 1
+    },
+    {
+      unique: true,
+      partialFilterExpression: {
+        type: INVITATION_TYPES.BOARD_INVITATION,
+        'boardInvitation.status': BOARD_INVITATION_STATUS.PENDING,
+        _destroy: false
+      },
+      name: 'unique_pending_board_invitation'
+    }
+  )
+  await collection.createIndex({ expiresAt: 1 }, { name: 'invitation_expiry_lookup' })
 }
 
 const update = async (invitationId, updateData) => {
@@ -172,6 +307,11 @@ export const invitationModel = {
   createNewBoardInvitation,
   createNewWorkspaceInvitation,
   findOneById,
+  findPendingBoardInvitation,
+  findByBoard,
+  transitionBoardInvitation,
+  expirePendingBoardInvitations,
+  initIndexes,
   update,
   findByUser
 }

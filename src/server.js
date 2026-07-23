@@ -17,6 +17,7 @@ import { socketAuthMiddleware } from './sockets/socketAuth'
 import { notificationModel } from '~/models/notificationModel'
 import { workspaceActivityModel } from '~/models/workspaceActivityModel'
 import { accountService } from '~/services/accountService'
+import { invitationModel } from '~/models/invitationModel'
 
 const START_SERVER = () => {
   const app = express()
@@ -100,6 +101,7 @@ const START_SERVER = () => {
       await notificationModel.initIndexes()
       await workspaceActivityModel.initIndexes()
       await accountService.initIndexes()
+      await invitationModel.initIndexes()
     } catch (indexErr) {
       console.error('initIndexes failed:', indexErr?.message)
     }
