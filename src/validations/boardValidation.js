@@ -143,10 +143,39 @@ const importBoard = async (req, res, next) => {
   }
 }
 
+const importPersonalBoards = async (req, res, next) => {
+  const boardEnvelopeSchema = Joi.object({
+    schemaVersion: Joi.number().valid(1).required(),
+    kind: Joi.string().valid('board').required(),
+    exportedAt: Joi.any().optional(),
+    excludedData: Joi.array().items(Joi.string()).optional(),
+    board: boardImportSchema.required()
+  })
+  const correctCondition = Joi.object({
+    schemaVersion: Joi.number().valid(1).required(),
+    kind: Joi.string().valid('personal-boards').required(),
+    exportedAt: Joi.any().optional(),
+    count: Joi.number().integer().min(0).max(100).optional(),
+    boards: Joi.array().max(100).items(boardEnvelopeSchema).required()
+  })
+
+  try {
+    req.body = await correctCondition.validateAsync(req.body, {
+      abortEarly: false,
+      stripUnknown: true,
+      convert: true
+    })
+    next()
+  } catch (error) {
+    next(new ApiError(StatusCodes.UNPROCESSABLE_ENTITY, new Error(error).message))
+  }
+}
+
 export const boardValidation = {
   createNew,
   update,
   cloneTemplate,
   moveCardifferentColumn,
-  importBoard
+  importBoard,
+  importPersonalBoards
 }

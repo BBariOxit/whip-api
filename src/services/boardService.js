@@ -145,6 +145,32 @@ const importBoard = async (userId, reqBody) => {
   }
 }
 
+const importPersonalBoards = async (userId, reqBody) => {
+  try {
+    const ownerObjectId = new ObjectId(userId)
+    const boardPackages = reqBody.boards.map(envelope => (
+      buildBoardDocs(envelope.board, {
+        ownerObjectId,
+        workspaceId: null,
+        forceType: BOARD_TYPES.PRIVATE
+      })
+    ))
+    const boardIds = await boardModel.importBoards(boardPackages)
+
+    return {
+      count: boardIds.length,
+      boardIds,
+      counts: boardPackages.reduce((totals, boardPackage) => ({
+        columns: totals.columns + boardPackage.columnDocs.length,
+        cards: totals.cards + boardPackage.cardDocs.length,
+        labels: totals.labels + boardPackage.labelDocs.length
+      }), { columns: 0, cards: 0, labels: 0 })
+    }
+  } catch (error) {
+    throw error
+  }
+}
+
 // Nhân bản 1 board có sẵn thành bản sao MỚI trong CÙNG ngữ cảnh (giữ workspaceId + type).
 // Người bấm là owner duy nhất. Tái dùng đúng logic remap của import (buildBoardDocs): coi board
 // sống như một "bản export trong bộ nhớ" (JSON.stringify để ObjectId thành chuỗi, khớp shape helper cần).
@@ -711,6 +737,7 @@ export const boardService = {
   createNew,
   exportData,
   importBoard,
+  importPersonalBoards,
   duplicateBoard,
   getDetails,
   update,

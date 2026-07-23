@@ -317,6 +317,116 @@ describe('joining boards', () => {
   })
 })
 
+describe('personal board archive import', () => {
+  it('restores every board atomically with new private ownership', async () => {
+    const user = await createUser('personal-import@example.com')
+    const sourceBoardId = new ObjectId()
+    const sourceColumnId = new ObjectId()
+    const sourceCardId = new ObjectId()
+    const archive = {
+      schemaVersion: 1,
+      kind: 'personal-boards',
+      count: 2,
+      boards: [
+        {
+          schemaVersion: 1,
+          kind: 'board',
+          board: {
+            _id: sourceBoardId.toString(),
+            title: 'Imported board one',
+            description: 'First imported board',
+            type: 'public',
+            background: { type: 'solid', color1: '#123456' },
+            columnOrderIds: [sourceColumnId.toString()],
+            columns: [{
+              _id: sourceColumnId.toString(),
+              title: 'Imported column',
+              cardOrderIds: [sourceCardId.toString()]
+            }],
+            cards: [{
+              _id: sourceCardId.toString(),
+              columnId: sourceColumnId.toString(),
+              title: 'Imported card'
+            }],
+            labels: [],
+            customFields: []
+          }
+        },
+        {
+          schemaVersion: 1,
+          kind: 'board',
+          board: {
+            _id: new ObjectId().toString(),
+            title: 'Imported board two',
+            description: 'Second imported board',
+            type: 'workspace_visible',
+            background: { type: 'solid', color1: '#654321' },
+            columnOrderIds: [],
+            columns: [],
+            cards: [],
+            labels: [],
+            customFields: []
+          }
+        }
+      ]
+    }
+
+    const response = await request(app)
+      .post('/v1/boards/import-personal')
+      .set('Cookie', await authCookie(user))
+      .send(archive)
+      .expect(201)
+
+    expect(response.body.count).toBe(2)
+    const importedBoards = await db.collection('boards')
+      .find({ ownerIds: user._id })
+      .sort({ title: 1 })
+      .toArray()
+    expect(importedBoards).toHaveLength(2)
+    expect(importedBoards.every(board => (
+      board.type === 'private' &&
+      board.workspaceId === null &&
+      board.ownerIds.length === 1 &&
+      board.ownerIds[0].toString() === user._id.toString()
+    ))).toBe(true)
+    expect(importedBoards[0]._id.toString()).not.toBe(sourceBoardId.toString())
+
+    const importedCard = await db.collection('cards').findOne({
+      boardId: importedBoards[0]._id
+    })
+    const importedColumn = await db.collection('columns').findOne({
+      boardId: importedBoards[0]._id
+    })
+    expect(importedCard.columnId.toString()).toBe(importedColumn._id.toString())
+    expect(importedColumn.cardOrderIds[0].toString()).toBe(importedCard._id.toString())
+  })
+
+  it('rejects an invalid archive before writing any board', async () => {
+    const user = await createUser('invalid-personal-import@example.com')
+    await request(app)
+      .post('/v1/boards/import-personal')
+      .set('Cookie', await authCookie(user))
+      .send({
+        schemaVersion: 1,
+        kind: 'personal-boards',
+        boards: [{
+          schemaVersion: 1,
+          kind: 'board',
+          board: {
+            _id: new ObjectId().toString(),
+            title: 'x',
+            description: 'Invalid board title',
+            columns: [],
+            cards: []
+          }
+        }]
+      })
+      .expect(422)
+
+    expect(await db.collection('boards').countDocuments({ ownerIds: user._id })).toBe(0)
+  })
+})
+
 describe('delete and access revocation', () => {
   it('enforces workspace board-deletion policy and removes board children', async () => {
     const owner = await createUser('owner-delete@example.com')

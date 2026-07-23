@@ -90,6 +90,16 @@ const importBoard = async (req, res, next) => {
   }
 }
 
+const importPersonalBoards = async (req, res, next) => {
+  try {
+    const userId = req.jwtDecoded._id
+    const result = await boardService.importPersonalBoards(userId, req.body)
+    res.status(StatusCodes.CREATED).json(result)
+  } catch (error) {
+    next(error)
+  }
+}
+
 const duplicateBoard = async (req, res, next) => {
   try {
     const userId = req.jwtDecoded._id
@@ -317,6 +327,7 @@ export const boardController = {
   createNew,
   exportBoard,
   importBoard,
+  importPersonalBoards,
   duplicateBoard,
   getDetails,
   update,

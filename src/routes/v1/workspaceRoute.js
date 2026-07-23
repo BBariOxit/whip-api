@@ -5,6 +5,7 @@ import { requireWorkspaceRole } from '~/middlewares/rbacMiddleware'
 import { workspaceValidation } from '~/validations/workspaceValidation'
 import { multerUploadMiddleware } from '~/middlewares/multerUploadMiddleware'
 import { WORKSPACE_ROLES } from '~/utils/constants'
+import { authRateLimitMiddleware } from '~/middlewares/authRateLimitMiddleware'
 
 const Router = express.Router()
 
@@ -27,7 +28,12 @@ Router.route('/accept-invite')
 // (họ tự trở thành owner của workspace mới) → không gắn workspace-role check.
 // Đặt trước block '/:id' để tránh nhầm 'import' thành tham số :id.
 Router.route('/import')
-  .post(authMiddleware.isAuthorized, workspaceValidation.importWorkspace, workspaceController.importData)
+  .post(
+    authMiddleware.isAuthorized,
+    authRateLimitMiddleware.dataImport,
+    workspaceValidation.importWorkspace,
+    workspaceController.importData
+  )
 
 // =============================================
 // Routes CẦN workspace role check (RBAC)
