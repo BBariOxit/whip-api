@@ -41,5 +41,8 @@ export const authRateLimitMiddleware = {
   oauth: create({ windowMs: 15 * 60 * 1000, max: 20, message: 'Too many OAuth attempts. Try again later.' }),
   passwordChange: create({ windowMs: 15 * 60 * 1000, max: 5, message: 'Too many password attempts. Try again later.' }),
   passwordResetRequest: create({ windowMs: 60 * 60 * 1000, max: 5, message: 'Too many password reset requests. Try again later.' }),
-  passwordReset: create({ windowMs: 60 * 60 * 1000, max: 10, message: 'Too many password reset attempts. Try again later.' })
+  passwordReset: create({ windowMs: 60 * 60 * 1000, max: 10, message: 'Too many password reset attempts. Try again later.' }),
+  dataExport: create({ windowMs: 60 * 60 * 1000, max: 10, message: 'Too many data export requests. Try again later.' }),
+  accountDeletionRequest: create({ windowMs: 60 * 60 * 1000, max: 3, message: 'Too many account deletion requests. Try again later.' }),
+  accountDeletion: create({ windowMs: 60 * 60 * 1000, max: 10, message: 'Too many account deletion attempts. Try again later.' })
 }

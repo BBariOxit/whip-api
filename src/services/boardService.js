@@ -1,4 +1,3 @@
-/* eslint-disable no-useless-catch */
 import { slugify } from '~/utils/formatter'
 import { boardModel } from '~/models/boardModel'
 import { columnModel } from '~/models/columnModel'
@@ -58,7 +57,48 @@ const createNew = async (userId, reqBody) => {
   }
 }
 
-// Export 1 board ra JSON thuần (board + columns + cards + labels + customFields).
+const buildPortableBoard = (board) => ({
+  _id: board._id,
+  title: board.title,
+  description: board.description,
+  type: board.type,
+  background: board.background,
+  columnOrderIds: board.columnOrderIds || [],
+  columns: (board.columns || []).map(column => ({
+    _id: column._id,
+    title: column.title,
+    cardOrderIds: column.cardOrderIds || []
+  })),
+  cards: (board.cards || []).map(card => ({
+    _id: card._id,
+    columnId: card.columnId,
+    title: card.title,
+    layout: card.layout,
+    description: card.description,
+    cover: card.cover,
+    labelIds: card.labelIds || [],
+    dueDate: card.dueDate,
+    dueComplete: card.dueComplete || false,
+    checklists: card.checklists || [],
+    customFieldValues: card.customFieldValues || []
+  })),
+  labels: (board.labels || []).map(label => ({
+    _id: label._id,
+    title: label.title,
+    color: label.color
+  })),
+  customFields: (board.customFields || []).map(field => ({
+    _id: field._id,
+    name: field.name,
+    type: field.type,
+    options: field.options || [],
+    showOnFront: field.showOnFront || false
+  }))
+})
+
+// Export a portable, restorable board snapshot. Collaborator IDs, comments and
+// Cloudinary attachments are intentionally excluded because they cannot be
+// safely transferred to another account.
 // Quyền đã được chặn ở route bằng requireBoardRole(['admin','member']) → chỉ owner/member export được.
 const exportData = async (userId, boardId) => {
   try {
@@ -74,18 +114,8 @@ const exportData = async (userId, boardId) => {
       schemaVersion: 1,
       kind: 'board',
       exportedAt: new Date().toISOString(),
-      board: {
-        _id: board._id,
-        title: board.title,
-        description: board.description,
-        type: board.type,
-        background: board.background,
-        columnOrderIds: board.columnOrderIds,
-        columns: board.columns, // đã lọc _destroy: false từ aggregate getDetails
-        cards: board.cards,
-        labels: board.labels,
-        customFields: board.customFields
-      }
+      excludedData: ['comments', 'attachments', 'memberAssignments'],
+      board: buildPortableBoard(board)
     }
   } catch (error) {
     throw error
@@ -201,7 +231,7 @@ const getDetails = async (userId, boardId, precomputedAccessRole = null) => {
     // // B2: đưa card về đúng column của nó
     // resBoard.columns.forEach(column => {
     //   column.cards = resBoard.cards.filter(card => card.columnId.toString() === column._id.toString())
-         // Cách dùng .equals này là bởi vì chúng ta hiểu ObjectId trong MongoDB có support method .equals
+    // Cách dùng .equals này là bởi vì chúng ta hiểu ObjectId trong MongoDB có support method .equals
     //   // column.cards = resBoard.cards.filter(card => card.columnId.equals(column._id))
     // })
     // // B3: xóa mảng card khỏi board ban đầu
@@ -495,7 +525,7 @@ const cloneTemplate = async (userId, templateBoardId) => {
       }
       newLabelsData.push(newLabel)
     }
-    
+
     if (newLabelsData.length > 0) {
       await GET_DB().collection(labelModel.LABEL_COLLECTION_NAME).insertMany(newLabelsData)
     }
@@ -587,15 +617,15 @@ const joinBoard = async (userId, boardId) => {
 
     const isAlreadyJoined = board.memberIds?.some(id => id.toString() === userId.toString())
     const isOwner = board.ownerIds?.some(id => id.toString() === userId.toString())
-    
+
     if (isAlreadyJoined || isOwner) {
       throw new ApiError(StatusCodes.BAD_REQUEST, 'You are already a member of this board!')
     }
 
     await boardModel.pushMemberIds(boardId, userId)
-    
+
     const newMember = await userModel.findOneById(userId)
-    
+
     return {
       _id: newMember._id,
       email: newMember.email,

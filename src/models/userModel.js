@@ -30,6 +30,8 @@ const USER_COLLECTION_SCHEMA = Joi.object({
   tokenVersion: Joi.number().integer().min(0).default(0),
   passwordResetTokenHash: Joi.string().allow(null).default(null),
   passwordResetExpiresAt: Joi.date().timestamp('javascript').allow(null).default(null),
+  accountDeletionTokenHash: Joi.string().allow(null).default(null),
+  accountDeletionExpiresAt: Joi.date().timestamp('javascript').allow(null).default(null),
 
   createdAt: Joi.date().timestamp('javascript').default(Date.now),
   updatedAt: Joi.date().timestamp('javascript').default(null),
@@ -79,6 +81,17 @@ const findOneByPasswordResetToken = async (tokenHash) => {
   } catch (error) { throw new Error(error) }
 }
 
+const findOneByAccountDeletionToken = async (userId, tokenHash) => {
+  try {
+    return await GET_DB().collection(USER_COLLECTION_NAME).findOne({
+      _id: new ObjectId(userId),
+      accountDeletionTokenHash: tokenHash,
+      accountDeletionExpiresAt: { $gt: Date.now() },
+      isActive: true
+    })
+  } catch (error) { throw new Error(error) }
+}
+
 // Lấy nhiều user theo danh sách id (dùng để đối chiếu @mention với handle của member)
 const findManyByIds = async (userIds) => {
   try {
@@ -116,6 +129,22 @@ const savePasswordResetToken = async (userId, tokenHash, expiresAt) => {
         $set: {
           passwordResetTokenHash: tokenHash,
           passwordResetExpiresAt: expiresAt,
+          updatedAt: Date.now()
+        }
+      },
+      { returnDocument: 'after' }
+    )
+  } catch (error) { throw new Error(error) }
+}
+
+const saveAccountDeletionToken = async (userId, tokenHash, expiresAt) => {
+  try {
+    return await GET_DB().collection(USER_COLLECTION_NAME).findOneAndUpdate(
+      { _id: new ObjectId(userId), isActive: true },
+      {
+        $set: {
+          accountDeletionTokenHash: tokenHash,
+          accountDeletionExpiresAt: expiresAt,
           updatedAt: Date.now()
         }
       },
@@ -172,9 +201,11 @@ export const userModel = {
   findOneById,
   findOneByEmail,
   findOneByPasswordResetToken,
+  findOneByAccountDeletionToken,
   findManyByIds,
   update,
   savePasswordResetToken,
+  saveAccountDeletionToken,
   updatePassword,
   resetPassword
 }

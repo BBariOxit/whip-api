@@ -4,6 +4,7 @@ import { userController } from '~/controllers/userController'
 import { authMiddleware } from '~/middlewares/authMiddleware'
 import { multerUploadMiddleware } from '~/middlewares/multerUploadMiddleware'
 import { authRateLimitMiddleware } from '~/middlewares/authRateLimitMiddleware'
+import { accountController } from '~/controllers/accountController'
 
 const Router = express.Router()
 
@@ -56,6 +57,35 @@ Router.route('/change-password')
     authRateLimitMiddleware.passwordChange,
     userValidation.changePassword,
     userController.changePassword
+  )
+
+Router.route('/export-data')
+  .get(
+    authMiddleware.isAuthorized,
+    authRateLimitMiddleware.dataExport,
+    accountController.exportAccountData
+  )
+
+Router.route('/export-personal-boards')
+  .get(
+    authMiddleware.isAuthorized,
+    authRateLimitMiddleware.dataExport,
+    accountController.exportPersonalBoards
+  )
+
+Router.route('/request-account-deletion')
+  .post(
+    authMiddleware.isAuthorized,
+    authRateLimitMiddleware.accountDeletionRequest,
+    accountController.requestAccountDeletion
+  )
+
+Router.route('/account')
+  .delete(
+    authMiddleware.isAuthorized,
+    authRateLimitMiddleware.accountDeletion,
+    userValidation.deleteAccount,
+    accountController.deleteAccount
   )
 
 export const userRoute = Router
