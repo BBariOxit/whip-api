@@ -5,21 +5,37 @@ import { boardModel } from '~/models/boardModel'
 import { invitationModel } from '~/models/invitationModel'
 import { INVITATION_TYPES, BOARD_INVITATION_STATUS } from '~/utils/constants'
 import { pickUser } from '~/utils/formatter'
+import { getBoardAccessRole } from '~/middlewares/rbacMiddleware'
 
 const createNewBoardInvitation = async (reqBody, inviterId) => {
   try {
     // Người đi mời: chính là người đang request, nên chúng ta tìm theo id lấy từ token
     const inviter = await userModel.findOneById(inviterId)
-    
+
     // Người được mời: lấy theo email nhận từ phía FE
     const invitee = await userModel.findOneByEmail(reqBody.inviteeEmail)
-    
+
     // Tìm luôn cái board ra để lấy data xử lý
     const board = await boardModel.findOneById(reqBody.boardId)
 
     // Nếu không tồn tại 1 trong 3 thì cứ thẳng tay reject
     if (!invitee || !inviter || !board) {
       throw new ApiError(StatusCodes.NOT_FOUND, 'Inviter, Invitee or Board not found!')
+    }
+
+    const inviterBoardRole = await getBoardAccessRole(board, inviterId)
+    if (!['admin', 'member'].includes(inviterBoardRole)) {
+      throw new ApiError(StatusCodes.FORBIDDEN, 'You do not have permission to invite users to this board!')
+    }
+
+    if (invitee._id.toString() === inviterId.toString()) {
+      throw new ApiError(StatusCodes.BAD_REQUEST, 'You cannot invite yourself to a board!')
+    }
+
+    const existingBoardUserIds = [...(board.ownerIds || []), ...(board.memberIds || [])]
+      .map(id => id.toString())
+    if (existingBoardUserIds.includes(invitee._id.toString())) {
+      throw new ApiError(StatusCodes.CONFLICT, 'This user is already a member of the board!')
     }
 
     // Tạo data cần thiết để lưu vào trong DB
@@ -36,7 +52,7 @@ const createNewBoardInvitation = async (reqBody, inviterId) => {
 
     // Gọi sang Model để lưu vào DB
     const createdInvitation = await invitationModel.createNewBoardInvitation(newInvitationData)
-    
+
     const getInvitation = await invitationModel.findOneById(createdInvitation.insertedId.toString())
 
     // Ngoài thông tin của cái board invitation mới tạo thì trả về đủ cả luôn board, inviter, invitee cho FE thoải mái xử lý.
@@ -48,8 +64,8 @@ const createNewBoardInvitation = async (reqBody, inviterId) => {
     }
 
     return resInvitation
-  } catch (error) { 
-    throw error 
+  } catch (error) {
+    throw error
   }
 }
 
@@ -61,15 +77,15 @@ const getInvitations = async (userId) => {
     // Vì các dữ liệu inviter, invitee và board là đang ở giá trị mảng 1 phần tử nếu lấy
     // ra được nên chúng ta biến đổi nó về Json Object trước khi trả về
     const resInvitations = getInvitations.map(inv => ({
-        ...inv,
-        inviter: inv.inviter[0] || {},
-        invitee: inv.invitee[0] || {},
-        board: inv.board[0] || {}
+      ...inv,
+      inviter: inv.inviter[0] || {},
+      invitee: inv.invitee[0] || {},
+      board: inv.board[0] || {}
     }))
 
     return resInvitations
-  } catch (error) { 
-    throw error 
+  } catch (error) {
+    throw error
   }
 }
 
@@ -78,6 +94,13 @@ const updateBoardInvitation = async (userId, invitationId, status) => {
     // Tìm bản ghi invitation trong model
     const getInvitation = await invitationModel.findOneById(invitationId)
     if (!getInvitation) throw new ApiError(StatusCodes.NOT_FOUND, 'Invitation not found!')
+
+    if (getInvitation.inviteeId?.toString() !== userId.toString()) {
+      throw new ApiError(StatusCodes.FORBIDDEN, 'This invitation is not addressed to your account!')
+    }
+    if (getInvitation.boardInvitation?.status !== BOARD_INVITATION_STATUS.PENDING) {
+      throw new ApiError(StatusCodes.CONFLICT, 'This invitation has already been processed!')
+    }
 
     // Sau khi có Invitation rồi thì lấy full thông tin của board
     const boardId = getInvitation.boardInvitation.boardId
@@ -88,8 +111,9 @@ const updateBoardInvitation = async (userId, invitationId, status) => {
     // là owner hoặc member của board rồi thì trả về thông báo lỗi luôn.
     // Note: 2 mảng memberIds và ownerIds của board nó đang là kiểu dữ liệu ObjectId
     // nên cho nó về String hết luôn để check
-    const boardOwnerAndMemberIds = [...getBoard.ownerIds, ...getBoard.memberIds].toString()
-    if (status === BOARD_INVITATION_STATUS.ACCEPTED && boardOwnerAndMemberIds.includes(userId)) {
+    const boardOwnerAndMemberIds = [...getBoard.ownerIds, ...getBoard.memberIds]
+      .map(id => id.toString())
+    if (status === BOARD_INVITATION_STATUS.ACCEPTED && boardOwnerAndMemberIds.includes(userId.toString())) {
       throw new ApiError(StatusCodes.NOT_ACCEPTABLE, 'You already a member of this board!')
     }
 
@@ -114,7 +138,7 @@ const updateBoardInvitation = async (userId, invitationId, status) => {
     return updatedInvitation
 
   } catch (error) {
-    throw error 
+    throw error
   }
 }
 
