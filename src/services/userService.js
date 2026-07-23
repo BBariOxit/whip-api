@@ -3,7 +3,6 @@ import { userModel } from '~/models/userModel'
 import { StatusCodes } from 'http-status-codes'
 import ApiError from '~/utils/ApiError'
 import bcryptjs from 'bcryptjs'
-import { v4 as uuidv4 } from 'uuid'
 import { pickUser } from '~/utils/formatter'
 import { brevoProvider } from '~/providers/brevoProvider'
 import { env } from '~/config/environment'
@@ -62,7 +61,7 @@ const createNew = async (reqBody) => {
       // sẽ hiện thị ra tên người dùng (ví dụ: khi đăng ký tài khoản phanbao@gmail.com thì hiển thị username là phanbao và displayName là phanbao)
       displayName: nameFromEmail,
       avatar: defaultAvatar, // Thêm avatar
-      verifyToken: uuidv4() // tạo mã token xác thực
+      verifyToken: crypto.randomUUID() // tạo mã token xác thực
     }
 
     // thực hiện lưu thông tin user vào db
