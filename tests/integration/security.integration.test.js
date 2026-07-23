@@ -227,6 +227,91 @@ describe('board RBAC', () => {
   })
 })
 
+describe('board ownership transfer', () => {
+  it('transfers ownership atomically to an active direct member', async () => {
+    const owner = await createUser('owner-transfer@example.com')
+    const member = await createUser('member-transfer@example.com')
+    const board = await createBoard({ owner, memberIds: [member._id] })
+
+    const response = await request(app)
+      .post(`/v1/boards/${board._id}/transfer-ownership`)
+      .set('Cookie', await authCookie(owner))
+      .send({ targetUserId: member._id.toString() })
+      .expect(200)
+
+    expect(response.body.board.ownerIds).toContain(member._id.toString())
+    expect(response.body.board.ownerIds).not.toContain(owner._id.toString())
+    expect(response.body.board.memberIds).toContain(owner._id.toString())
+    expect(response.body.board.memberIds).not.toContain(member._id.toString())
+
+    await request(app)
+      .post(`/v1/boards/${board._id}/leave`)
+      .set('Cookie', await authCookie(owner))
+      .expect(200)
+
+    const updatedBoard = await db.collection('boards').findOne({ _id: board._id })
+    expect(updatedBoard.ownerIds.map(id => id.toString())).toEqual([member._id.toString()])
+    expect(updatedBoard.memberIds.map(id => id.toString())).not.toContain(owner._id.toString())
+  })
+
+  it('rejects non-members and inactive members as ownership targets', async () => {
+    const owner = await createUser('owner-invalid-transfer@example.com')
+    const inactiveMember = await createUser('inactive-transfer@example.com')
+    const outsider = await createUser('outsider-transfer@example.com')
+    await db.collection('users').updateOne(
+      { _id: inactiveMember._id },
+      { $set: { isActive: false } }
+    )
+    const board = await createBoard({ owner, memberIds: [inactiveMember._id] })
+
+    await request(app)
+      .post(`/v1/boards/${board._id}/transfer-ownership`)
+      .set('Cookie', await authCookie(owner))
+      .send({ targetUserId: outsider._id.toString() })
+      .expect(400)
+
+    await request(app)
+      .post(`/v1/boards/${board._id}/transfer-ownership`)
+      .set('Cookie', await authCookie(owner))
+      .send({ targetUserId: inactiveMember._id.toString() })
+      .expect(400)
+
+    const unchangedBoard = await db.collection('boards').findOne({ _id: board._id })
+    expect(unchangedBoard.ownerIds.map(id => id.toString())).toEqual([owner._id.toString()])
+  })
+
+  it('blocks inherited workspace admins from transferring board ownership', async () => {
+    const workspaceOwner = await createUser('workspace-owner-transfer@example.com')
+    const boardOwner = await createUser('board-owner-transfer@example.com')
+    const targetMember = await createUser('target-transfer@example.com')
+    const workspace = await createWorkspace({
+      owner: workspaceOwner,
+      members: [{
+        userId: boardOwner._id,
+        email: boardOwner.email,
+        role: 'member',
+        status: 'active',
+        inviteToken: null,
+        joinedAt: Date.now()
+      }]
+    })
+    const board = await createBoard({
+      owner: boardOwner,
+      workspaceId: workspace._id,
+      memberIds: [targetMember._id]
+    })
+
+    await request(app)
+      .post(`/v1/boards/${board._id}/transfer-ownership`)
+      .set('Cookie', await authCookie(workspaceOwner))
+      .send({ targetUserId: targetMember._id.toString() })
+      .expect(403)
+
+    const unchangedBoard = await db.collection('boards').findOne({ _id: board._id })
+    expect(unchangedBoard.ownerIds.map(id => id.toString())).toEqual([boardOwner._id.toString()])
+  })
+})
+
 describe('board invitations', () => {
   it('blocks unauthorized inviters and only lets the addressed invitee respond', async () => {
     const owner = await createUser('owner-invite@example.com')

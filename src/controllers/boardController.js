@@ -302,6 +302,22 @@ const leaveBoard = async (req, res, next) => {
   }
 }
 
+const transferOwnership = async (req, res, next) => {
+  try {
+    const userId = req.jwtDecoded._id
+    const boardId = req.params.id
+    const { targetUserId } = req.body
+
+    const board = await boardService.transferOwnership(userId, boardId, targetUserId)
+    res.status(StatusCodes.OK).json({
+      message: 'Board ownership transferred successfully!',
+      board
+    })
+  } catch (error) {
+    next(error)
+  }
+}
+
 const getStarredBoards = async (req, res, next) => {
   try {
     const userId = req.jwtDecoded._id
@@ -343,6 +359,7 @@ export const boardController = {
   getColumnTemplates,
   joinBoard,
   leaveBoard,
+  transferOwnership,
   getStarredBoards,
   toggleStarred
 }

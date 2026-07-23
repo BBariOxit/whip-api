@@ -259,6 +259,53 @@ const update = async (boardId, updateData) => {
     throw new Error(error)
   }
 }
+// The query preconditions and update pipeline keep role changes atomic under concurrent requests.
+const transferOwnership = async (boardId, currentOwnerUserId, newOwnerUserId) => {
+  const currentOwnerObjectId = new ObjectId(currentOwnerUserId)
+  const newOwnerObjectId = new ObjectId(newOwnerUserId)
+
+  return GET_DB().collection(BOARD_COLLECTION_NAME).findOneAndUpdate(
+    {
+      _id: new ObjectId(boardId),
+      ownerIds: currentOwnerObjectId,
+      memberIds: newOwnerObjectId,
+      _destroy: false
+    },
+    [
+      {
+        $set: {
+          ownerIds: {
+            $setUnion: [
+              {
+                $filter: {
+                  input: { $ifNull: ['$ownerIds', []] },
+                  as: 'ownerId',
+                  cond: { $ne: ['$$ownerId', currentOwnerObjectId] }
+                }
+              },
+              [newOwnerObjectId]
+            ]
+          },
+          memberIds: {
+            $setUnion: [
+              {
+                $filter: {
+                  input: { $ifNull: ['$memberIds', []] },
+                  as: 'memberId',
+                  cond: { $ne: ['$$memberId', newOwnerObjectId] }
+                }
+              },
+              [currentOwnerObjectId]
+            ]
+          },
+          updatedAt: Date.now()
+        }
+      }
+    ],
+    { returnDocument: 'after' }
+  )
+}
+
 // Ánh xạ tuỳ chọn sắp xếp từ FE sang stage $sort của Mongo
 const BOARD_SORT_MAP = {
   recent: { createdAt: -1 },
@@ -597,6 +644,7 @@ export const boardModel = {
   pushColumnOrderIds,
   insertColumnIdAtIndex,
   update,
+  transferOwnership,
   pullColumnOrderIds,
   getBoards,
   getTemplates,

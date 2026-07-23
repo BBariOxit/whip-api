@@ -171,11 +171,28 @@ const importPersonalBoards = async (req, res, next) => {
   }
 }
 
+const transferOwnership = async (req, res, next) => {
+  const correctCondition = Joi.object({
+    targetUserId: Joi.string().required().pattern(OBJECT_ID_RULE).message(OBJECT_ID_RULE_MESSAGE)
+  })
+
+  try {
+    req.body = await correctCondition.validateAsync(req.body, {
+      abortEarly: false,
+      stripUnknown: true
+    })
+    next()
+  } catch (error) {
+    next(new ApiError(StatusCodes.UNPROCESSABLE_ENTITY, new Error(error).message))
+  }
+}
+
 export const boardValidation = {
   createNew,
   update,
   cloneTemplate,
   moveCardifferentColumn,
   importBoard,
-  importPersonalBoards
+  importPersonalBoards,
+  transferOwnership
 }

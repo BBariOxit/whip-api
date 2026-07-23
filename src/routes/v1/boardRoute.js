@@ -85,4 +85,12 @@ Router.route('/supports/moving_card')
 Router.route('/:id/leave')
   .post(authMiddleware.isAuthorized, boardController.leaveBoard)
 
+Router.route('/:id/transfer-ownership')
+  .post(
+    authMiddleware.isAuthorized,
+    requireBoardAdmin,
+    boardValidation.transferOwnership,
+    boardController.transferOwnership
+  )
+
 export const boardRouter = Router

@@ -672,11 +672,6 @@ const leaveBoard = async (userId, boardId) => {
       throw new ApiError(StatusCodes.NOT_FOUND, 'Board not found!')
     }
 
-    const isMember = board.memberIds?.some(id => id.toString() === userId.toString())
-    if (!isMember) {
-      throw new ApiError(StatusCodes.NOT_FOUND, 'You are not a member of this board!')
-    }
-
     const isOwner = board.ownerIds?.some(id => id.toString() === userId.toString())
     if (isOwner) {
       throw new ApiError(
@@ -685,11 +680,52 @@ const leaveBoard = async (userId, boardId) => {
       )
     }
 
+    const isMember = board.memberIds?.some(id => id.toString() === userId.toString())
+    if (!isMember) {
+      throw new ApiError(StatusCodes.NOT_FOUND, 'You are not a member of this board!')
+    }
+
     const result = await boardModel.pullMemberIds(boardId, userId)
     return result
   } catch (error) {
     throw error
   }
+}
+
+const transferOwnership = async (actorUserId, boardId, targetUserId) => {
+  if (actorUserId.toString() === targetUserId.toString()) {
+    throw new ApiError(StatusCodes.BAD_REQUEST, 'Select another board member as the new owner.')
+  }
+
+  const board = await boardModel.findOneById(boardId)
+  if (!board || board._destroy) {
+    throw new ApiError(StatusCodes.NOT_FOUND, 'Board not found!')
+  }
+
+  const isDirectOwner = board.ownerIds?.some(id => id.toString() === actorUserId.toString())
+  if (!isDirectOwner) {
+    throw new ApiError(StatusCodes.FORBIDDEN, 'Only a direct board owner can transfer ownership.')
+  }
+
+  const isDirectMember = board.memberIds?.some(id => id.toString() === targetUserId.toString())
+  if (!isDirectMember) {
+    throw new ApiError(StatusCodes.BAD_REQUEST, 'The new owner must be a current board member.')
+  }
+
+  const targetUser = await userModel.findOneById(targetUserId)
+  if (!targetUser || targetUser._destroy || !targetUser.isActive) {
+    throw new ApiError(StatusCodes.BAD_REQUEST, 'The selected board member is not active.')
+  }
+
+  const updatedBoard = await boardModel.transferOwnership(boardId, actorUserId, targetUserId)
+  if (!updatedBoard) {
+    throw new ApiError(
+      StatusCodes.CONFLICT,
+      'Board membership changed while transferring ownership. Refresh and try again.'
+    )
+  }
+
+  return updatedBoard
 }
 
 const getStarredBoards = async (userId) => {
@@ -751,6 +787,7 @@ export const boardService = {
   getArchivedItems,
   joinBoard,
   leaveBoard,
+  transferOwnership,
   getStarredBoards,
   toggleStarred
 }
