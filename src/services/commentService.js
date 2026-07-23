@@ -68,7 +68,7 @@ const updateComment = async (commentId, reqBody, userInfo) => {
     const targetComment = await commentModel.findOneById(commentId)
     if (!targetComment) throw new Error('Comment không tồn tại!')
 
-    if (targetComment.userId.toString() !== userInfo._id.toString()) {
+    if (!targetComment.userId || targetComment.userId.toString() !== userInfo._id.toString()) {
       throw new Error('Bạn không có quyền sửa comment này!')
     }
 
@@ -89,7 +89,7 @@ const deleteComment = async (commentId, userInfo) => {
     const targetComment = await commentModel.findOneById(commentId)
     if (!targetComment) throw new Error('Comment not found!')
 
-    if (targetComment.userId.toString() !== userInfo._id.toString()) {
+    if (!targetComment.userId || targetComment.userId.toString() !== userInfo._id.toString()) {
       throw new Error('You do not have permission to delete this comment!')
     }
 

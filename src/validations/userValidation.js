@@ -105,6 +105,20 @@ const resetPassword = async (req, res, next) => {
   }
 }
 
+const deleteAccount = async (req, res, next) => {
+  const correctCondition = Joi.object({
+    confirmation_email: emailSchema,
+    verification_code: Joi.string().pattern(/^\d{6}$/).required()
+  })
+
+  try {
+    req.body = await correctCondition.validateAsync(req.body, { abortEarly: false, allowUnknown: false })
+    next()
+  } catch (error) {
+    next(new ApiError(StatusCodes.UNPROCESSABLE_ENTITY, new Error(error).message))
+  }
+}
+
 const googleLogin = async (req, res, next) => {
   const correctCondition = Joi.object({ credential: Joi.string().required() })
   try {
@@ -136,6 +150,7 @@ export const userValidation = {
   changePassword,
   requestPasswordReset,
   resetPassword,
+  deleteAccount,
   googleLogin,
   githubLogin
 }

@@ -16,6 +16,7 @@ import { cardCommentSocket } from './sockets/cardCommentSocket'
 import { socketAuthMiddleware } from './sockets/socketAuth'
 import { notificationModel } from '~/models/notificationModel'
 import { workspaceActivityModel } from '~/models/workspaceActivityModel'
+import { accountService } from '~/services/accountService'
 
 const START_SERVER = () => {
   const app = express()
@@ -92,6 +93,7 @@ const START_SERVER = () => {
     try {
       await notificationModel.initIndexes()
       await workspaceActivityModel.initIndexes()
+      await accountService.initIndexes()
     } catch (indexErr) {
       console.error('initIndexes failed:', indexErr?.message)
     }
