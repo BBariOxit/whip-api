@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest'
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import express from 'express'
 import cookieParser from 'cookie-parser'
 import request from 'supertest'
@@ -12,6 +12,17 @@ let jwtProvider
 let app
 
 const TEST_ACCESS_SECRET = 'integration-test-access-secret-at-least-32-characters'
+const cloudinaryMocks = vi.hoisted(() => ({
+  deleteResource: vi.fn(async () => ({ result: 'ok' }))
+}))
+
+vi.mock('~/providers/CloudinaryProvider', () => ({
+  cloudinaryProvider: {
+    deleteResource: cloudinaryMocks.deleteResource,
+    getPublicIdFromUrl: vi.fn(() => null),
+    streamUpload: vi.fn()
+  }
+}))
 
 const createUser = async (email) => {
   const user = {
@@ -146,6 +157,7 @@ beforeAll(async () => {
 })
 
 beforeEach(async () => {
+  cloudinaryMocks.deleteResource.mockClear()
   const collections = await db.collections()
   await Promise.all(collections.map(collection => collection.deleteMany({})))
 })
@@ -340,8 +352,44 @@ describe('delete and access revocation', () => {
       boardId: board._id,
       columnId,
       title: 'Card',
+      attachments: [{
+        publicId: 'card-attachments/integration-file',
+        url: 'https://res.cloudinary.com/test/raw/upload/v1/card-attachments/integration-file.pdf',
+        filename: 'integration-file.pdf'
+      }],
       _destroy: false
     })
+    await Promise.all([
+      db.collection('labels').insertOne({
+        _id: new ObjectId(),
+        boardId: board._id,
+        title: 'Label'
+      }),
+      db.collection('comments').insertOne({
+        _id: new ObjectId(),
+        cardId,
+        userId: owner._id,
+        content: 'Comment'
+      }),
+      db.collection('activities').insertOne({
+        _id: new ObjectId(),
+        cardId,
+        userId: owner._id,
+        content: 'Activity'
+      }),
+      db.collection('notifications').insertOne({
+        _id: new ObjectId(),
+        userId: owner._id,
+        boardId: board._id,
+        message: 'Notification'
+      }),
+      db.collection('invitations').insertOne({
+        _id: new ObjectId(),
+        inviterId: owner._id,
+        inviteeId: member._id,
+        boardInvitation: { boardId: board._id, status: 'PENDING' }
+      })
+    ])
 
     await request(app)
       .delete(`/v1/boards/${board._id}`)
@@ -356,6 +404,15 @@ describe('delete and access revocation', () => {
     expect(await db.collection('boards').findOne({ _id: board._id })).toBeNull()
     expect(await db.collection('columns').findOne({ _id: columnId })).toBeNull()
     expect(await db.collection('cards').findOne({ _id: cardId })).toBeNull()
+    expect(await db.collection('labels').findOne({ boardId: board._id })).toBeNull()
+    expect(await db.collection('comments').findOne({ cardId })).toBeNull()
+    expect(await db.collection('activities').findOne({ cardId })).toBeNull()
+    expect(await db.collection('notifications').findOne({ boardId: board._id })).toBeNull()
+    expect(await db.collection('invitations').findOne({
+      'boardInvitation.boardId': board._id
+    })).toBeNull()
+    expect(cloudinaryMocks.deleteResource)
+      .toHaveBeenCalledWith('card-attachments/integration-file')
   })
 
   it('revokes direct board access in the same transaction when a member leaves', async () => {
@@ -400,5 +457,188 @@ describe('delete and access revocation', () => {
     expect(updatedBoard.ownerIds.map(id => id.toString())).toEqual([owner._id.toString()])
     expect(updatedBoard.memberIds.map(id => id.toString())).not.toContain(leaver._id.toString())
     expect(updatedBoard.starredBy.map(id => id.toString())).not.toContain(leaver._id.toString())
+  })
+
+  it('deletes a card, its child records and its unreferenced Cloudinary assets', async () => {
+    const owner = await createUser('owner-delete-card@example.com')
+    const board = await createBoard({ owner })
+    const columnId = new ObjectId()
+    const cardId = new ObjectId()
+    await db.collection('columns').insertOne({
+      _id: columnId,
+      boardId: board._id,
+      title: 'Column',
+      cardOrderIds: [cardId],
+      _destroy: false
+    })
+    await db.collection('cards').insertOne({
+      _id: cardId,
+      boardId: board._id,
+      columnId,
+      title: 'Card',
+      attachments: [{
+        publicId: 'card-attachments/card-delete-file',
+        url: 'https://res.cloudinary.com/test/raw/upload/v1/card-attachments/card-delete-file.pdf'
+      }],
+      _destroy: false
+    })
+    await Promise.all([
+      db.collection('comments').insertOne({
+        _id: new ObjectId(),
+        cardId,
+        userId: owner._id,
+        content: 'Comment'
+      }),
+      db.collection('activities').insertOne({
+        _id: new ObjectId(),
+        cardId,
+        userId: owner._id,
+        content: 'Activity'
+      })
+    ])
+
+    await request(app)
+      .delete(`/v1/cards/${cardId}`)
+      .set('Cookie', await authCookie(owner))
+      .expect(200)
+
+    const updatedColumn = await db.collection('columns').findOne({ _id: columnId })
+    expect(updatedColumn.cardOrderIds).toEqual([])
+    expect(await db.collection('cards').findOne({ _id: cardId })).toBeNull()
+    expect(await db.collection('comments').findOne({ cardId })).toBeNull()
+    expect(await db.collection('activities').findOne({ cardId })).toBeNull()
+    expect(cloudinaryMocks.deleteResource)
+      .toHaveBeenCalledWith('card-attachments/card-delete-file')
+  })
+
+  it('deletes and clears columns without leaving card children behind', async () => {
+    const owner = await createUser('owner-delete-column@example.com')
+    const board = await createBoard({ owner })
+    const deletedColumnId = new ObjectId()
+    const clearedColumnId = new ObjectId()
+    const deletedCardId = new ObjectId()
+    const clearedCardId = new ObjectId()
+    await db.collection('boards').updateOne(
+      { _id: board._id },
+      { $set: { columnOrderIds: [deletedColumnId, clearedColumnId] } }
+    )
+    await db.collection('columns').insertMany([
+      {
+        _id: deletedColumnId,
+        boardId: board._id,
+        title: 'Delete column',
+        cardOrderIds: [deletedCardId],
+        _destroy: false
+      },
+      {
+        _id: clearedColumnId,
+        boardId: board._id,
+        title: 'Clear column',
+        cardOrderIds: [clearedCardId],
+        _destroy: false
+      }
+    ])
+    await db.collection('cards').insertMany([
+      {
+        _id: deletedCardId,
+        boardId: board._id,
+        columnId: deletedColumnId,
+        title: 'Deleted card',
+        _destroy: false
+      },
+      {
+        _id: clearedCardId,
+        boardId: board._id,
+        columnId: clearedColumnId,
+        title: 'Cleared card',
+        _destroy: false
+      }
+    ])
+    await db.collection('comments').insertMany([
+      { _id: new ObjectId(), cardId: deletedCardId, content: 'Delete me' },
+      { _id: new ObjectId(), cardId: clearedCardId, content: 'Clear me' }
+    ])
+
+    await request(app)
+      .delete(`/v1/columns/${deletedColumnId}`)
+      .set('Cookie', await authCookie(owner))
+      .expect(200)
+    await request(app)
+      .delete(`/v1/columns/clear-cards/${clearedColumnId}`)
+      .set('Cookie', await authCookie(owner))
+      .expect(200)
+
+    const [updatedBoard, clearedColumn] = await Promise.all([
+      db.collection('boards').findOne({ _id: board._id }),
+      db.collection('columns').findOne({ _id: clearedColumnId })
+    ])
+    expect(await db.collection('columns').findOne({ _id: deletedColumnId })).toBeNull()
+    expect(updatedBoard.columnOrderIds.map(id => id.toString()))
+      .toEqual([clearedColumnId.toString()])
+    expect(clearedColumn.cardOrderIds).toEqual([])
+    expect(await db.collection('cards').countDocuments({
+      _id: { $in: [deletedCardId, clearedCardId] }
+    })).toBe(0)
+    expect(await db.collection('comments').countDocuments({
+      cardId: { $in: [deletedCardId, clearedCardId] }
+    })).toBe(0)
+  })
+
+  it('deletes a workspace and every owned child collection in one transaction', async () => {
+    const owner = await createUser('owner-delete-workspace@example.com')
+    const workspace = await createWorkspace({ owner })
+    const board = await createBoard({
+      owner,
+      workspaceId: workspace._id,
+      type: 'workspace_visible'
+    })
+    const columnId = new ObjectId()
+    const cardId = new ObjectId()
+    await db.collection('columns').insertOne({
+      _id: columnId,
+      boardId: board._id,
+      cardOrderIds: [cardId]
+    })
+    await db.collection('cards').insertOne({
+      _id: cardId,
+      boardId: board._id,
+      columnId,
+      title: 'Workspace card'
+    })
+    await Promise.all([
+      db.collection('comments').insertOne({
+        _id: new ObjectId(),
+        cardId,
+        content: 'Workspace comment'
+      }),
+      db.collection('workspace_activities').insertOne({
+        _id: new ObjectId(),
+        workspaceId: workspace._id,
+        content: 'Workspace activity'
+      }),
+      db.collection('notifications').insertOne({
+        _id: new ObjectId(),
+        workspaceId: workspace._id,
+        boardId: board._id,
+        message: 'Workspace notification'
+      })
+    ])
+
+    await request(app)
+      .delete(`/v1/workspaces/${workspace._id}`)
+      .set('Cookie', await authCookie(owner))
+      .expect(200)
+
+    expect(await db.collection('workspaces').findOne({ _id: workspace._id })).toBeNull()
+    expect(await db.collection('boards').findOne({ _id: board._id })).toBeNull()
+    expect(await db.collection('columns').findOne({ _id: columnId })).toBeNull()
+    expect(await db.collection('cards').findOne({ _id: cardId })).toBeNull()
+    expect(await db.collection('comments').findOne({ cardId })).toBeNull()
+    expect(await db.collection('workspace_activities').findOne({
+      workspaceId: workspace._id
+    })).toBeNull()
+    expect(await db.collection('notifications').findOne({
+      workspaceId: workspace._id
+    })).toBeNull()
   })
 })

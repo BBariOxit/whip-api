@@ -1,6 +1,5 @@
 import { workspaceModel } from '~/models/workspaceModel'
 import { boardModel } from '~/models/boardModel'
-import { boardService } from './boardService'
 import { userModel } from '~/models/userModel'
 import { invitationModel } from '~/models/invitationModel'
 import { StatusCodes } from 'http-status-codes'
@@ -17,6 +16,7 @@ import { cloudinaryProvider } from '~/providers/CloudinaryProvider'
 import { notificationService } from './notificationService'
 import { workspaceActivityService } from './workspaceActivityService'
 import { NOTIFICATION_TYPES, WORKSPACE_ACTIVITY_TYPES } from '~/utils/constants'
+import { cascadeDeletionService } from './cascadeDeletionService'
 
 // Lấy tên hiển thị đẹp cho 1 member (dùng cho targetName trong activity log).
 // Member đã có tài khoản -> displayName; member pending -> fallback về email.
@@ -77,19 +77,13 @@ const deleteItem = async (userId, workspaceId) => {
       throw new ApiError(StatusCodes.FORBIDDEN, 'Only the workspace owner can delete this workspace!')
     }
 
-    // Lấy tất cả boards thuộc workspace này
-    const boards = await boardModel.findByWorkspaceId(workspaceId)
-    
-    // Loop through each board and delete it (cascade: xóa columns + cards)
-    // Owner xoá workspace → luôn là 'admin' đối với mọi board
-    for (const board of boards) {
-      await boardService.deleteItem(board._id.toString(), 'admin')
+    const { result, assetCleanup } = await cascadeDeletionService.deleteWorkspace(workspaceId)
+
+    return {
+      deleteResult: 'Workspace and all related Boards deleted successfully!',
+      deletedBoardCount: result.deletedBoardCount,
+      assetCleanupFailures: assetCleanup.filter(item => item.status === 'failed').length
     }
-
-    // Cuối cùng xoá workspace
-    await workspaceModel.deleteOneById(workspaceId)
-
-    return { deleteResult: 'Workspace and all related Boards deleted successfully!' }
   } catch (error) {
     throw error
   }

@@ -13,6 +13,7 @@ import { workspaceModel } from '~/models/workspaceModel'
 import { ObjectId } from 'mongodb'
 import { getBoardAccessRole } from '~/middlewares/rbacMiddleware'
 import { buildBoardDocs } from '~/utils/importHelpers'
+import { cascadeDeletionService } from './cascadeDeletionService'
 
 // Enforce quyền tạo board trong 1 workspace (dùng chung cho createNew và duplicateBoard).
 // - Phải là member active của workspace.
@@ -375,21 +376,16 @@ const deleteItem = async (boardId, actorBoardRole) => {
       }
     }
 
-    // Xoá board
-    await boardModel.deleteOneById(boardId)
-
-    // Xoá toàn bộ column thuộc board
-    await columnModel.deleteManyByBoardId(boardId)
-
-    // Xoá toàn bộ card thuộc board
-    await cardModel.deleteManyByBoardId(boardId)
+    const { assetCleanup } = await cascadeDeletionService.deleteBoards([boardId])
+    const assetCleanupFailures = assetCleanup.filter(item => item.status === 'failed').length
 
     // Trả kèm workspaceId + title để controller bắn thông báo "board deleted" in-app.
     // Cascade (xoá cả workspace) gọi thẳng service nên KHÔNG bắn — tránh spam hàng loạt.
     return {
       deleteResult: 'Board and its Columns, Cards deleted successfully!',
       workspaceId: targetBoard.workspaceId,
-      boardTitle: targetBoard.title
+      boardTitle: targetBoard.title,
+      assetCleanupFailures
     }
   } catch (error) {
     throw error
@@ -416,29 +412,14 @@ const bulkDeleteItems = async (userId, boardIds) => {
     // nhất quán với deleteItem (creator xóa được board của mình bất kể setting).
     const allowedBoardIds = boardsToDelete.map(board => board._id)
 
-    if (allowedBoardIds.length > 0) {
-      // Delete boards
-      await db.collection(boardModel.BOARD_COLLECTION_NAME).deleteMany({
-        _id: { $in: allowedBoardIds }
-      })
+    const { assetCleanup } = await cascadeDeletionService.deleteBoards(
+      allowedBoardIds.map(id => id.toString())
+    )
 
-      // Delete columns
-      await db.collection(columnModel.COLUMN_COLLECTION_NAME).deleteMany({
-        boardId: { $in: allowedBoardIds }
-      })
-
-      // Delete cards
-      await db.collection(cardModel.CARD_COLLECTION_NAME).deleteMany({
-        boardId: { $in: allowedBoardIds }
-      })
-
-      // Delete labels
-      await db.collection(labelModel.LABEL_COLLECTION_NAME).deleteMany({
-        boardId: { $in: allowedBoardIds }
-      })
+    return {
+      deleteResult: `Successfully deleted ${allowedBoardIds.length} boards!`,
+      assetCleanupFailures: assetCleanup.filter(item => item.status === 'failed').length
     }
-
-    return { deleteResult: `Successfully deleted ${allowedBoardIds.length} boards!` }
   } catch (error) {
     throw error
   }

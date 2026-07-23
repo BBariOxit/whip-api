@@ -9,6 +9,7 @@ import { userModel } from '~/models/userModel'
 import { CARD_MEMBER_ACTIONS, ACTIVITY_ACTION_TYPES } from '~/utils/constants'
 import ApiError from '~/utils/ApiError'
 import { getBoardAccessRole } from '~/middlewares/rbacMiddleware'
+import { cascadeDeletionService } from './cascadeDeletionService'
 
 // Helper: Ghi log activity vào DB (không throw error nếu fail để không block luồng chính)
 const logActivity = async (data) => {
@@ -241,33 +242,22 @@ const deleteAttachment = async (cardId, publicId, userInfo) => {
   } catch (error) { throw error }
 }
 
-const deleteItem = async (cardId, userInfo) => {
+const deleteItem = async (cardId) => {
   try {
     const targetCard = await cardModel.findOneById(cardId)
     if (!targetCard) {
-      throw new Error('Card not found!')
+      throw new ApiError(StatusCodes.NOT_FOUND, 'Card not found!')
     }
 
-    // Xóa card khỏi db
-    await cardModel.deleteOneById(cardId)
-
-    // Xóa cardId khỏi mảng cardOrderIds của Column chứa nó
-    await columnModel.pullCardOrderIds(targetCard)
-
-    // Log activity
-    const fullUser = await userModel.findOneById(userInfo._id)
-    await logActivity({
-      cardId: cardId, // Có thể log ở cấp độ board nếu cardId đã mất
-      userId: userInfo._id,
-      userEmail: userInfo.email,
-      userAvatar: userInfo.avatar || null,
-      userDisplayName: fullUser?.displayName || fullUser?.username || userInfo.email,
-      actionType: 'DELETE_CARD',
-      content: `đã xóa một thẻ "${targetCard.title}"`
-    })
+    const { assetCleanup } = await cascadeDeletionService.deleteCard(cardId)
 
     // Trả kèm boardId + title để controller bắn thông báo "board activity" (in-app)
-    return { deleteResult: 'Card deleted successfully!', boardId: targetCard.boardId, cardTitle: targetCard.title }
+    return {
+      deleteResult: 'Card deleted successfully!',
+      boardId: targetCard.boardId,
+      cardTitle: targetCard.title,
+      assetCleanupFailures: assetCleanup.filter(item => item.status === 'failed').length
+    }
   } catch (error) {
     throw error
   }

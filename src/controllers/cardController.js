@@ -72,7 +72,7 @@ const deleteItem = async (req, res, next) => {
   try {
     const cardId = req.params.id
     const userInfo = req.jwtDecoded
-    const result = await cardService.deleteItem(cardId, userInfo)
+    const result = await cardService.deleteItem(cardId)
 
     res.status(StatusCodes.OK).json(result)
 
@@ -158,4 +158,4 @@ export const cardController = {
   useTemplate,
   deleteTemplate,
   duplicateCard
-}
+}
