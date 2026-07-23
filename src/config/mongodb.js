@@ -16,7 +16,7 @@ const client = new MongoClient(env.MONGODB_URI, {
   },
   // TLS certificate and hostname verification intentionally use the MongoDB
   // driver's secure defaults. Never disable verification in application code.
-  tls: true
+  ...(env.BUILD_MODE === 'production' ? { tls: true } : {})
 })
 // kết nối tới db
 export const CONNECT_DB = async () => {
