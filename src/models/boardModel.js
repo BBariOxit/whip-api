@@ -259,6 +259,53 @@ const update = async (boardId, updateData) => {
     throw new Error(error)
   }
 }
+// The query preconditions and update pipeline keep role changes atomic under concurrent requests.
+const transferOwnership = async (boardId, currentOwnerUserId, newOwnerUserId) => {
+  const currentOwnerObjectId = new ObjectId(currentOwnerUserId)
+  const newOwnerObjectId = new ObjectId(newOwnerUserId)
+
+  return GET_DB().collection(BOARD_COLLECTION_NAME).findOneAndUpdate(
+    {
+      _id: new ObjectId(boardId),
+      ownerIds: currentOwnerObjectId,
+      memberIds: newOwnerObjectId,
+      _destroy: false
+    },
+    [
+      {
+        $set: {
+          ownerIds: {
+            $setUnion: [
+              {
+                $filter: {
+                  input: { $ifNull: ['$ownerIds', []] },
+                  as: 'ownerId',
+                  cond: { $ne: ['$$ownerId', currentOwnerObjectId] }
+                }
+              },
+              [newOwnerObjectId]
+            ]
+          },
+          memberIds: {
+            $setUnion: [
+              {
+                $filter: {
+                  input: { $ifNull: ['$memberIds', []] },
+                  as: 'memberId',
+                  cond: { $ne: ['$$memberId', newOwnerObjectId] }
+                }
+              },
+              [currentOwnerObjectId]
+            ]
+          },
+          updatedAt: Date.now()
+        }
+      }
+    ],
+    { returnDocument: 'after' }
+  )
+}
+
 // Ánh xạ tuỳ chọn sắp xếp từ FE sang stage $sort của Mongo
 const BOARD_SORT_MAP = {
   recent: { createdAt: -1 },
@@ -561,23 +608,29 @@ const getStarredBoards = async (userId) => {
   }
 }
 
-// Import 1 board lẻ: ghi board + columns + cards + labels trong MỘT transaction (all-or-nothing).
-// Nếu bất kỳ bước nào lỗi → rollback, không để lại board/column mồ côi.
-const importBoard = async ({ boardDoc, columnDocs, cardDocs, labelDocs }) => {
+// Import one or more boards in a single transaction. Batch imports are
+// all-or-nothing so a personal-board archive can never be partially restored.
+const importBoards = async (boardPackages) => {
   const session = GET_CLIENT().startSession()
   try {
     await session.withTransaction(async () => {
       const db = GET_DB()
-      await db.collection(BOARD_COLLECTION_NAME).insertOne(boardDoc, { session })
-      // insertMany ném lỗi nếu mảng rỗng → chỉ ghi khi có dữ liệu.
-      if (columnDocs.length) await db.collection('columns').insertMany(columnDocs, { session })
-      if (cardDocs.length) await db.collection('cards').insertMany(cardDocs, { session })
-      if (labelDocs.length) await db.collection('labels').insertMany(labelDocs, { session })
+      for (const { boardDoc, columnDocs, cardDocs, labelDocs } of boardPackages) {
+        await db.collection(BOARD_COLLECTION_NAME).insertOne(boardDoc, { session })
+        if (columnDocs.length) await db.collection('columns').insertMany(columnDocs, { session })
+        if (cardDocs.length) await db.collection('cards').insertMany(cardDocs, { session })
+        if (labelDocs.length) await db.collection('labels').insertMany(labelDocs, { session })
+      }
     })
-    return boardDoc._id
+    return boardPackages.map(({ boardDoc }) => boardDoc._id)
   } finally {
     await session.endSession()
   }
+}
+
+const importBoard = async (boardPackage) => {
+  const [boardId] = await importBoards([boardPackage])
+  return boardId
 }
 
 export const boardModel = {
@@ -585,11 +638,13 @@ export const boardModel = {
   BOARD_COLLECTION_SCHEMA,
   createNew,
   importBoard,
+  importBoards,
   findOneById,
   getDetails,
   pushColumnOrderIds,
   insertColumnIdAtIndex,
   update,
+  transferOwnership,
   pullColumnOrderIds,
   getBoards,
   getTemplates,

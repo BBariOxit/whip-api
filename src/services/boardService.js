@@ -13,6 +13,7 @@ import { workspaceModel } from '~/models/workspaceModel'
 import { ObjectId } from 'mongodb'
 import { getBoardAccessRole } from '~/middlewares/rbacMiddleware'
 import { buildBoardDocs } from '~/utils/importHelpers'
+import { cascadeDeletionService } from './cascadeDeletionService'
 
 // Enforce quyền tạo board trong 1 workspace (dùng chung cho createNew và duplicateBoard).
 // - Phải là member active của workspace.
@@ -138,6 +139,32 @@ const importBoard = async (userId, reqBody) => {
     return {
       boardId: newBoardId,
       counts: { columns: columnDocs.length, cards: cardDocs.length, labels: labelDocs.length }
+    }
+  } catch (error) {
+    throw error
+  }
+}
+
+const importPersonalBoards = async (userId, reqBody) => {
+  try {
+    const ownerObjectId = new ObjectId(userId)
+    const boardPackages = reqBody.boards.map(envelope => (
+      buildBoardDocs(envelope.board, {
+        ownerObjectId,
+        workspaceId: null,
+        forceType: BOARD_TYPES.PRIVATE
+      })
+    ))
+    const boardIds = await boardModel.importBoards(boardPackages)
+
+    return {
+      count: boardIds.length,
+      boardIds,
+      counts: boardPackages.reduce((totals, boardPackage) => ({
+        columns: totals.columns + boardPackage.columnDocs.length,
+        cards: totals.cards + boardPackage.cardDocs.length,
+        labels: totals.labels + boardPackage.labelDocs.length
+      }), { columns: 0, cards: 0, labels: 0 })
     }
   } catch (error) {
     throw error
@@ -375,21 +402,16 @@ const deleteItem = async (boardId, actorBoardRole) => {
       }
     }
 
-    // Xoá board
-    await boardModel.deleteOneById(boardId)
-
-    // Xoá toàn bộ column thuộc board
-    await columnModel.deleteManyByBoardId(boardId)
-
-    // Xoá toàn bộ card thuộc board
-    await cardModel.deleteManyByBoardId(boardId)
+    const { assetCleanup } = await cascadeDeletionService.deleteBoards([boardId])
+    const assetCleanupFailures = assetCleanup.filter(item => item.status === 'failed').length
 
     // Trả kèm workspaceId + title để controller bắn thông báo "board deleted" in-app.
     // Cascade (xoá cả workspace) gọi thẳng service nên KHÔNG bắn — tránh spam hàng loạt.
     return {
       deleteResult: 'Board and its Columns, Cards deleted successfully!',
       workspaceId: targetBoard.workspaceId,
-      boardTitle: targetBoard.title
+      boardTitle: targetBoard.title,
+      assetCleanupFailures
     }
   } catch (error) {
     throw error
@@ -416,29 +438,14 @@ const bulkDeleteItems = async (userId, boardIds) => {
     // nhất quán với deleteItem (creator xóa được board của mình bất kể setting).
     const allowedBoardIds = boardsToDelete.map(board => board._id)
 
-    if (allowedBoardIds.length > 0) {
-      // Delete boards
-      await db.collection(boardModel.BOARD_COLLECTION_NAME).deleteMany({
-        _id: { $in: allowedBoardIds }
-      })
+    const { assetCleanup } = await cascadeDeletionService.deleteBoards(
+      allowedBoardIds.map(id => id.toString())
+    )
 
-      // Delete columns
-      await db.collection(columnModel.COLUMN_COLLECTION_NAME).deleteMany({
-        boardId: { $in: allowedBoardIds }
-      })
-
-      // Delete cards
-      await db.collection(cardModel.CARD_COLLECTION_NAME).deleteMany({
-        boardId: { $in: allowedBoardIds }
-      })
-
-      // Delete labels
-      await db.collection(labelModel.LABEL_COLLECTION_NAME).deleteMany({
-        boardId: { $in: allowedBoardIds }
-      })
+    return {
+      deleteResult: `Successfully deleted ${allowedBoardIds.length} boards!`,
+      assetCleanupFailures: assetCleanup.filter(item => item.status === 'failed').length
     }
-
-    return { deleteResult: `Successfully deleted ${allowedBoardIds.length} boards!` }
   } catch (error) {
     throw error
   }
@@ -608,11 +615,33 @@ const getArchivedItems = async (boardId) => {
 
 const joinBoard = async (userId, boardId) => {
   try {
+    if (!OBJECT_ID_RULE.test(boardId)) {
+      throw new ApiError(StatusCodes.BAD_REQUEST, 'Invalid board id')
+    }
+
     const board = await boardModel.findOneById(boardId)
     if (!board) throw new ApiError(StatusCodes.NOT_FOUND, 'Board not found!')
 
-    if (board.type === 'private') {
+    if (board.type === BOARD_TYPES.PRIVATE) {
       throw new ApiError(StatusCodes.FORBIDDEN, 'Cannot join a private board!')
+    }
+
+    if (board.type === BOARD_TYPES.WORKSPACE_VISIBLE) {
+      if (!board.workspaceId) {
+        throw new ApiError(StatusCodes.FORBIDDEN, 'Workspace-visible boards must belong to a workspace!')
+      }
+
+      const workspace = await workspaceModel.findById(board.workspaceId.toString())
+      const isActiveWorkspaceMember = workspace?.members?.some(member => (
+        member.userId?.toString() === userId.toString() &&
+        member.status === 'active'
+      ))
+      if (!isActiveWorkspaceMember) {
+        throw new ApiError(
+          StatusCodes.FORBIDDEN,
+          'Only active workspace members can join this board!'
+        )
+      }
     }
 
     const isAlreadyJoined = board.memberIds?.some(id => id.toString() === userId.toString())
@@ -643,11 +672,6 @@ const leaveBoard = async (userId, boardId) => {
       throw new ApiError(StatusCodes.NOT_FOUND, 'Board not found!')
     }
 
-    const isMember = board.memberIds?.some(id => id.toString() === userId.toString())
-    if (!isMember) {
-      throw new ApiError(StatusCodes.NOT_FOUND, 'You are not a member of this board!')
-    }
-
     const isOwner = board.ownerIds?.some(id => id.toString() === userId.toString())
     if (isOwner) {
       throw new ApiError(
@@ -656,11 +680,52 @@ const leaveBoard = async (userId, boardId) => {
       )
     }
 
+    const isMember = board.memberIds?.some(id => id.toString() === userId.toString())
+    if (!isMember) {
+      throw new ApiError(StatusCodes.NOT_FOUND, 'You are not a member of this board!')
+    }
+
     const result = await boardModel.pullMemberIds(boardId, userId)
     return result
   } catch (error) {
     throw error
   }
+}
+
+const transferOwnership = async (actorUserId, boardId, targetUserId) => {
+  if (actorUserId.toString() === targetUserId.toString()) {
+    throw new ApiError(StatusCodes.BAD_REQUEST, 'Select another board member as the new owner.')
+  }
+
+  const board = await boardModel.findOneById(boardId)
+  if (!board || board._destroy) {
+    throw new ApiError(StatusCodes.NOT_FOUND, 'Board not found!')
+  }
+
+  const isDirectOwner = board.ownerIds?.some(id => id.toString() === actorUserId.toString())
+  if (!isDirectOwner) {
+    throw new ApiError(StatusCodes.FORBIDDEN, 'Only a direct board owner can transfer ownership.')
+  }
+
+  const isDirectMember = board.memberIds?.some(id => id.toString() === targetUserId.toString())
+  if (!isDirectMember) {
+    throw new ApiError(StatusCodes.BAD_REQUEST, 'The new owner must be a current board member.')
+  }
+
+  const targetUser = await userModel.findOneById(targetUserId)
+  if (!targetUser || targetUser._destroy || !targetUser.isActive) {
+    throw new ApiError(StatusCodes.BAD_REQUEST, 'The selected board member is not active.')
+  }
+
+  const updatedBoard = await boardModel.transferOwnership(boardId, actorUserId, targetUserId)
+  if (!updatedBoard) {
+    throw new ApiError(
+      StatusCodes.CONFLICT,
+      'Board membership changed while transferring ownership. Refresh and try again.'
+    )
+  }
+
+  return updatedBoard
 }
 
 const getStarredBoards = async (userId) => {
@@ -708,6 +773,7 @@ export const boardService = {
   createNew,
   exportData,
   importBoard,
+  importPersonalBoards,
   duplicateBoard,
   getDetails,
   update,
@@ -721,6 +787,7 @@ export const boardService = {
   getArchivedItems,
   joinBoard,
   leaveBoard,
+  transferOwnership,
   getStarredBoards,
   toggleStarred
 }

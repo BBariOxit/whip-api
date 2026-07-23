@@ -1,13 +1,11 @@
 import { workspaceModel } from '~/models/workspaceModel'
 import { boardModel } from '~/models/boardModel'
-import { boardService } from './boardService'
 import { userModel } from '~/models/userModel'
-import { invitationModel } from '~/models/invitationModel'
 import { StatusCodes } from 'http-status-codes'
 import ApiError from '~/utils/ApiError'
-import { WORKSPACE_ROLES, INVITATION_TYPES, BOARD_INVITATION_STATUS } from '~/utils/constants'
+import { WORKSPACE_ROLES, INVITATION_TTL_DAYS } from '~/utils/constants'
 import { buildBoardDocs } from '~/utils/importHelpers'
-import { GET_DB } from '~/config/mongodb'
+import { GET_CLIENT, GET_DB } from '~/config/mongodb'
 import { ObjectId } from 'mongodb'
 
 import crypto from 'crypto'
@@ -17,6 +15,7 @@ import { cloudinaryProvider } from '~/providers/CloudinaryProvider'
 import { notificationService } from './notificationService'
 import { workspaceActivityService } from './workspaceActivityService'
 import { NOTIFICATION_TYPES, WORKSPACE_ACTIVITY_TYPES } from '~/utils/constants'
+import { cascadeDeletionService } from './cascadeDeletionService'
 
 // Lấy tên hiển thị đẹp cho 1 member (dùng cho targetName trong activity log).
 // Member đã có tài khoản -> displayName; member pending -> fallback về email.
@@ -77,19 +76,13 @@ const deleteItem = async (userId, workspaceId) => {
       throw new ApiError(StatusCodes.FORBIDDEN, 'Only the workspace owner can delete this workspace!')
     }
 
-    // Lấy tất cả boards thuộc workspace này
-    const boards = await boardModel.findByWorkspaceId(workspaceId)
-    
-    // Loop through each board and delete it (cascade: xóa columns + cards)
-    // Owner xoá workspace → luôn là 'admin' đối với mọi board
-    for (const board of boards) {
-      await boardService.deleteItem(board._id.toString(), 'admin')
+    const { result, assetCleanup } = await cascadeDeletionService.deleteWorkspace(workspaceId)
+
+    return {
+      deleteResult: 'Workspace and all related Boards deleted successfully!',
+      deletedBoardCount: result.deletedBoardCount,
+      assetCleanupFailures: assetCleanup.filter(item => item.status === 'failed').length
     }
-
-    // Cuối cùng xoá workspace
-    await workspaceModel.deleteOneById(workspaceId)
-
-    return { deleteResult: 'Workspace and all related Boards deleted successfully!' }
   } catch (error) {
     throw error
   }
@@ -393,7 +386,12 @@ const inviteMember = async (inviterId, workspaceId, reqBody) => {
         throw new ApiError(StatusCodes.CONFLICT, 'This user is already an active member of this workspace!')
       }
       if (existingMember.status === 'pending') {
-        throw new ApiError(StatusCodes.CONFLICT, 'An invitation has already been sent to this email!')
+        const isExpired = existingMember.inviteExpiresAt &&
+          new Date(existingMember.inviteExpiresAt).getTime() <= Date.now()
+        if (!isExpired) {
+          throw new ApiError(StatusCodes.CONFLICT, 'An invitation has already been sent to this email!')
+        }
+        await workspaceModel.removeMember(workspaceId, inviteeEmail)
       }
     }
 
@@ -415,6 +413,7 @@ const inviteMember = async (inviterId, workspaceId, reqBody) => {
       role: memberRole,
       status: 'pending',
       inviteToken: inviteToken,
+      inviteExpiresAt: new Date(Date.now() + INVITATION_TTL_MS),
       joinedAt: Date.now()
     }
 
@@ -466,6 +465,13 @@ const acceptInvite = async (userId, userEmail, token, workspaceId) => {
     const pendingMember = workspace.members.find(m => m.inviteToken === token)
     if (!pendingMember) {
       throw new ApiError(StatusCodes.NOT_FOUND, 'Invalid or expired invitation token!')
+    }
+    if (
+      pendingMember.inviteExpiresAt &&
+      new Date(pendingMember.inviteExpiresAt).getTime() <= Date.now()
+    ) {
+      await workspaceModel.removeMember(workspaceId, pendingMember.email)
+      throw new ApiError(StatusCodes.GONE, 'This workspace invitation has expired!')
     }
 
     // Đảm bảo đúng người nhận email mới được accept
@@ -544,8 +550,18 @@ const removeMember = async (actorUserId, workspaceId, targetUserId) => {
       throw new ApiError(StatusCodes.FORBIDDEN, 'Admins cannot remove other admins. Only the owner can do this.')
     }
 
-    // Xóa member khỏi workspace (dùng targetUserId, nếu truyền email thì xoá bằng email)
-    const updatedWorkspace = await workspaceModel.removeMember(workspaceId, targetUserId)
+    const workspaceOwner = workspace.members.find(m => m.role === WORKSPACE_ROLES.OWNER)
+    if (!workspaceOwner?.userId) {
+      throw new ApiError(StatusCodes.CONFLICT, 'Workspace owner information is invalid!')
+    }
+
+    // Membership and direct board access are revoked in one transaction.
+    const updatedWorkspace = await removeMemberAndRevokeBoardAccess({
+      workspaceId,
+      memberIdentifier: targetUserId,
+      memberUserId: targetMember.userId?.toString(),
+      workspaceOwnerId: workspaceOwner.userId.toString()
+    })
 
     // Ghi Activity Log (best-effort): actor đã kick member nào ra khỏi workspace
     const removedName = await resolveMemberName(targetMember.userId, targetMember.email)
@@ -553,13 +569,6 @@ const removeMember = async (actorUserId, workspaceId, targetUserId) => {
       workspaceId, actorId: actorUserId, actionType: WORKSPACE_ACTIVITY_TYPES.MEMBER_REMOVED,
       targetName: removedName
     })
-
-    const workspaceOwner = workspace.members.find(m => m.role === WORKSPACE_ROLES.OWNER)
-
-    // CASCADE: Gỡ user khỏi tất cả boards trong workspace (Chỉ cần làm nếu user đã có tài khoản thực sự)
-    if (targetMember.userId && workspaceOwner && workspaceOwner.userId) {
-      await cascadeRemoveUserFromBoards(workspaceId, targetMember.userId.toString(), workspaceOwner.userId.toString())
-    }
 
     return updatedWorkspace
   } catch (error) {
@@ -652,20 +661,23 @@ const leaveWorkspace = async (userId, workspaceId) => {
       )
     }
 
-    // Xóa member khỏi workspace
-    const updatedWorkspace = await workspaceModel.removeMember(workspaceId, userId)
+    const workspaceOwner = workspace.members.find(m => m.role === WORKSPACE_ROLES.OWNER)
+    if (!workspaceOwner?.userId) {
+      throw new ApiError(StatusCodes.CONFLICT, 'Workspace owner information is invalid!')
+    }
+
+    // Membership and direct board access are revoked in one transaction.
+    const updatedWorkspace = await removeMemberAndRevokeBoardAccess({
+      workspaceId,
+      memberIdentifier: userId,
+      memberUserId: userId,
+      workspaceOwnerId: workspaceOwner.userId.toString()
+    })
 
     // Ghi Activity Log (best-effort): thành viên tự rời workspace
     workspaceActivityService.log({
       workspaceId, actorId: userId, actionType: WORKSPACE_ACTIVITY_TYPES.MEMBER_LEFT
     })
-
-    const workspaceOwner = workspace.members.find(m => m.role === WORKSPACE_ROLES.OWNER)
-
-    // CASCADE: Gỡ user khỏi tất cả boards trong workspace
-    if (workspaceOwner && workspaceOwner.userId) {
-      await cascadeRemoveUserFromBoards(workspaceId, userId, workspaceOwner.userId.toString())
-    }
 
     return updatedWorkspace
   } catch (error) {
@@ -689,49 +701,100 @@ const getMembers = async (workspaceId) => {
 }
 
 /**
- * CASCADE: Gỡ user khỏi tất cả boards thuộc workspace
- * Được gọi khi kick member hoặc member leave workspace
+ * Atomically remove a workspace membership and all direct board access.
+ * If the departing member owns boards, the workspace owner becomes their owner.
  */
-const cascadeRemoveUserFromBoards = async (workspaceId, userId, workspaceOwnerId) => {
+const removeMemberAndRevokeBoardAccess = async ({
+  workspaceId,
+  memberIdentifier,
+  memberUserId,
+  workspaceOwnerId
+}) => {
+  const client = GET_CLIENT()
+  const session = client.startSession()
+  let updatedWorkspace = null
+
   try {
     const db = GET_DB()
-    const userObjectId = new ObjectId(userId)
-    const ownerObjectId = new ObjectId(workspaceOwnerId)
-    const boardCollection = db.collection(boardModel.BOARD_COLLECTION_NAME)
+    const workspaceObjectId = new ObjectId(workspaceId)
+    const memberPullCondition = memberIdentifier.includes('@')
+      ? { email: memberIdentifier }
+      : { userId: new ObjectId(memberIdentifier) }
 
-    // 1. Đối với các board mà user bị xóa/rời đi ĐANG LÀ OWNER:
-    // Gỡ user khỏi ownerIds và NHÉT workspaceOwner vào làm owner thay thế
-    const ownedBoards = await boardCollection.find({ 
-      workspaceId: new ObjectId(workspaceId),
-      ownerIds: userObjectId 
-    }).toArray()
-
-    for (const board of ownedBoards) {
-      await boardCollection.updateOne(
-        { _id: board._id },
-        { 
-          $pull: { ownerIds: userObjectId },
-          $addToSet: { ownerIds: ownerObjectId, memberIds: ownerObjectId }
-        }
+    await session.withTransaction(async () => {
+      updatedWorkspace = await db.collection(workspaceModel.WORKSPACE_COLLECTION_NAME).findOneAndUpdate(
+        { _id: workspaceObjectId, members: { $elemMatch: memberPullCondition } },
+        {
+          $pull: { members: memberPullCondition },
+          $set: { updatedAt: Date.now() }
+        },
+        { returnDocument: 'after', session }
       )
-    }
 
-    // 2. Gỡ user khỏi memberIds VÀ ownerIds trên TOÀN BỘ boards thuộc workspace này
-    // (Làm thêm bước ownerIds để chắc chắn không sót)
-    await boardCollection.updateMany(
-      { workspaceId: new ObjectId(workspaceId) },
-      { 
-        $pull: { 
-          memberIds: userObjectId,
-          ownerIds: userObjectId 
-        } 
+      if (!updatedWorkspace) {
+        throw new ApiError(StatusCodes.CONFLICT, 'Workspace membership changed. Please retry.')
       }
-    )
-  } catch (error) {
-    console.error('Error in cascadeRemoveUserFromBoards:', error.message)
-    // Không throw — cascade failure không nên block main operation
+
+      if (!memberUserId) return
+
+      const userObjectId = new ObjectId(memberUserId)
+      const ownerObjectId = new ObjectId(workspaceOwnerId)
+      const boardCollection = db.collection(boardModel.BOARD_COLLECTION_NAME)
+
+      // A pipeline avoids conflicting update operators on ownerIds.
+      await boardCollection.updateMany(
+        { workspaceId: workspaceObjectId, ownerIds: userObjectId },
+        [{
+          $set: {
+            ownerIds: {
+              $setUnion: [
+                {
+                  $filter: {
+                    input: { $ifNull: ['$ownerIds', []] },
+                    as: 'ownerId',
+                    cond: { $ne: ['$$ownerId', userObjectId] }
+                  }
+                },
+                [ownerObjectId]
+              ]
+            },
+            memberIds: {
+              $setUnion: [
+                {
+                  $filter: {
+                    input: { $ifNull: ['$memberIds', []] },
+                    as: 'memberId',
+                    cond: { $ne: ['$$memberId', userObjectId] }
+                  }
+                },
+                [ownerObjectId]
+              ]
+            }
+          }
+        }],
+        { session }
+      )
+
+      await boardCollection.updateMany(
+        { workspaceId: workspaceObjectId },
+        {
+          $pull: {
+            memberIds: userObjectId,
+            ownerIds: userObjectId,
+            starredBy: userObjectId
+          }
+        },
+        { session }
+      )
+    })
+
+    return updatedWorkspace
+  } finally {
+    await session.endSession()
   }
 }
+
+const INVITATION_TTL_MS = INVITATION_TTL_DAYS * 24 * 60 * 60 * 1000
 
 export const workspaceService = {
   createNew,

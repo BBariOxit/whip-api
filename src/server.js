@@ -17,6 +17,7 @@ import { socketAuthMiddleware } from './sockets/socketAuth'
 import { notificationModel } from '~/models/notificationModel'
 import { workspaceActivityModel } from '~/models/workspaceActivityModel'
 import { accountService } from '~/services/accountService'
+import { invitationModel } from '~/models/invitationModel'
 
 const START_SERVER = () => {
   const app = express()
@@ -36,8 +37,14 @@ const START_SERVER = () => {
   // xử lý cors
   app.use(cors(corsOptions))
 
-  //enable req.body json data
-  app.use(express.json())
+  // Import archives may be larger than normal API payloads. Keep the larger
+  // limit scoped to import routes; all other JSON requests remain at 1 MB.
+  app.use([
+    '/v1/boards/import',
+    '/v1/boards/import-personal',
+    '/v1/workspaces/import'
+  ], express.json({ limit: '10mb' }))
+  app.use(express.json({ limit: '1mb' }))
 
   //use api v1
   app.use('/v1', APIs_V1)
@@ -94,6 +101,7 @@ const START_SERVER = () => {
       await notificationModel.initIndexes()
       await workspaceActivityModel.initIndexes()
       await accountService.initIndexes()
+      await invitationModel.initIndexes()
     } catch (indexErr) {
       console.error('initIndexes failed:', indexErr?.message)
     }

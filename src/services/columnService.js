@@ -5,6 +5,7 @@ import ApiError from '~/utils/ApiError'
 import { StatusCodes } from 'http-status-codes'
 import { GET_DB } from '~/config/mongodb'
 import { ObjectId } from 'mongodb'
+import { cascadeDeletionService } from './cascadeDeletionService'
 
 const createNew = async (reqBody) => {
   try {
@@ -48,16 +49,12 @@ const deleteItem = async (columnId) => {
     if (!targetColumn) {
       throw new ApiError(StatusCodes.NOT_FOUND, 'board not found!')
     }
-    // xóa column
-    await columnModel.deleteOneById(columnId)
+    const { assetCleanup } = await cascadeDeletionService.deleteColumn(columnId)
 
-    // xóa toàn bộ card thuộc column trên
-    await cardModel.deleteManyByColumnId(columnId)
-
-    // Xoá columnId trong mảng columnOrderIds của cái Board chứa nó
-    await boardModel.pullColumnOrderIds(targetColumn)
-
-    return { deleteResult: 'Column and its Cards deleted successfully!' }
+    return {
+      deleteResult: 'Column and its Cards deleted successfully!',
+      assetCleanupFailures: assetCleanup.filter(item => item.status === 'failed').length
+    }
   } catch (error) {
     throw error
   }
@@ -70,13 +67,13 @@ const clearAllCards = async (columnId) => {
       throw new ApiError(StatusCodes.NOT_FOUND, 'column not found!')
     }
 
-    // xóa toàn bộ card thuộc column trên
-    await cardModel.deleteManyByColumnId(columnId)
+    const { result, assetCleanup } = await cascadeDeletionService.clearColumnCards(columnId)
 
-    // làm rỗng cardOrderIds
-    await columnModel.emptyCardOrderIds(columnId)
-
-    return { deleteResult: 'All cards in column deleted successfully!' }
+    return {
+      deleteResult: 'All cards in column deleted successfully!',
+      deletedCardCount: result.deletedCardCount,
+      assetCleanupFailures: assetCleanup.filter(item => item.status === 'failed').length
+    }
   } catch (error) {
     throw error
   }

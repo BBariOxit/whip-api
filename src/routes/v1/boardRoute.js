@@ -3,6 +3,7 @@ import { boardController } from '~/controllers/boardController'
 import { authMiddleware } from '~/middlewares/authMiddleware'
 import { boardValidation } from '~/validations/boardValidation'
 import { requireBoardAdmin, requireBoardRole } from '~/middlewares/rbacMiddleware'
+import { authRateLimitMiddleware } from '~/middlewares/authRateLimitMiddleware'
 
 const Router = express.Router()
 
@@ -24,7 +25,20 @@ Router.route('/bulk-delete')
 // Import 1 board từ file JSON → board mới trong Personal Boards của người gọi (tự làm owner).
 // Chỉ cần đăng nhập; khai báo TRƯỚC '/:id' để Express không match 'import' thành param :id.
 Router.route('/import')
-  .post(authMiddleware.isAuthorized, boardValidation.importBoard, boardController.importBoard)
+  .post(
+    authMiddleware.isAuthorized,
+    authRateLimitMiddleware.dataImport,
+    boardValidation.importBoard,
+    boardController.importBoard
+  )
+
+Router.route('/import-personal')
+  .post(
+    authMiddleware.isAuthorized,
+    authRateLimitMiddleware.dataImport,
+    boardValidation.importPersonalBoards,
+    boardController.importPersonalBoards
+  )
 
 // Lưu ý: phải khai báo TRƯỚC route '/:id' để Express không match '/starred' thành param :id
 Router.route('/starred')
@@ -70,5 +84,13 @@ Router.route('/supports/moving_card')
 
 Router.route('/:id/leave')
   .post(authMiddleware.isAuthorized, boardController.leaveBoard)
+
+Router.route('/:id/transfer-ownership')
+  .post(
+    authMiddleware.isAuthorized,
+    requireBoardAdmin,
+    boardValidation.transferOwnership,
+    boardController.transferOwnership
+  )
 
 export const boardRouter = Router
