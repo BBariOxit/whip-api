@@ -6,8 +6,9 @@ WORKDIR /app
 # Copy package files
 COPY package*.json ./
 
-# Install all dependencies including devDependencies (needed for babel build)
-RUN npm install
+# Install exactly the dependencies recorded in package-lock.json.
+# Dev dependencies are required here for the Babel build.
+RUN npm ci
 
 # Copy configuration and source files
 COPY .babelrc ./
@@ -31,7 +32,7 @@ ENV PORT=8017
 COPY package*.json ./
 
 # Install only production dependencies
-RUN npm ci --only=production
+RUN npm ci --omit=dev
 
 # Copy the built output from the builder stage
 COPY --from=builder /app/build ./build
