@@ -54,8 +54,17 @@ const START_SERVER = () => {
 
   // Tạo một cái server mới bọc thằng app của express để làm real-time với socket.io
   const server = http.createServer(app)
-  // khởi tạo biến io với sever và cors
-  const io = socketIo(server, { cors: corsOptions })
+  // Khởi tạo Socket.io với cấu hình tương thích Cloudflare Proxy:
+  // - transports: ưu tiên 'websocket' để tránh long-polling bị Cloudflare terminate sớm (HTTP 524)
+  // - pingTimeout/pingInterval: giữ kết nối ổn định trong giới hạn timeout của Cloudflare (100s)
+  // - allowEIO3: đảm bảo tương thích với cả client socket.io v3 và v4
+  const io = socketIo(server, {
+    cors: corsOptions,
+    transports: ['websocket', 'polling'],
+    pingTimeout: 60000,
+    pingInterval: 25000,
+    allowEIO3: true
+  })
   // Xác thực socket qua cookie accessToken -> gắn socket.userId (dùng để phân quyền join room)
   io.use(socketAuthMiddleware)
   // Lưu io instance vào app để Controller có thể truy cập qua req.app.get('socketio')
